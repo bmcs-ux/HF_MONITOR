@@ -1,1 +1,25 @@
+# Abaikan Virtual Environment
 venv/
+
+# Abaikan file kompresi dan installer
+*.tar
+*.tar.*
+*.jar
+*.exe
+*.msi
+*.deb
+*.zip
+*.tgz
+
+# Abaikan log
+*.log
+*.log.*
+
+# Abaikan signature dan folder build
+*.sig
+pkg/
+src/
+
+# Abaikan file model dan cache (Tambahan yang disarankan)
+*.pkl
+__pycache__/
