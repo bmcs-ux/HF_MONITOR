@@ -1,0 +1,405 @@
+Unhandled exception: unimplemented function ucrtbase.dll.crealf called in 64-bit code (0x006fffff3ccf77).
+Register dump:
+ rip:00006fffff3ccf77 rsp:000070ec805d9210 rbp:00007ffffeb700d0 eflags:00000202 (   - --  I   - - - )
+ rax:000070ec805d9258 rbx:00006fffffa4f1a0 rcx:000070ec805d9230 rdx:0000000000000000
+ rsi:000070ec805d9300 rdi:00007fffff62c580  r8:00006ffffea7dc61  r9:000070ec805d9308 r10:0000000000000048
+ r11:656c706d6f635f5f r12:0000000000000003 r13:0000000000000003 r14:000070ec80266118 r15:0000000000000000
+Stack dump:
+0x0070ec805d9210:  000070ec805d9230 00006ffffb087000
+0x0070ec805d9220:  000070ec805d92f0 00007ffffeb7a440
+0x0070ec805d9230:  0000000180000100 0000000000000000
+0x0070ec805d9240:  00006fffff3ccf77 00006fff00000002
+0x0070ec805d9250:  00006ffffea7d000 00006ffffea7dc61
+0x0070ec805d9260:  7a76b64f2222fb2e 0000000000000000
+0x0070ec805d9270:  00000000ffdac426 00006ffffb029af0
+0x0070ec805d9280:  00007ffffeb700d0 00006ffffac58ba5
+0x0070ec805d9290:  00006ffffb029af0 00006ffffacd9d69
+0x0070ec805d92a0:  00006ffffb029af0 00006ffffac6b920
+0x0070ec805d92b0:  0000000000000000 0000000000000000
+0x0070ec805d92c0:  00006ffffb029af0 00006ffffac58afb
+Backtrace:
+=>0 0x006fffff3ccf77 in kernelbase (+0xcf77) (0x007ffffeb700d0)
+  1 0x006ffffea0fd85 __wine_spec_unimplemented_stub+0x35(module=<internal error>, function=<internal error>) [/usr/src/packages/BUILD/dlls/winecrt0/stub.c:32] in ucrtbase (0x007ffffeb700d0)
+  2 0x006ffffe9f27b7 in ucrtbase (+0x27b7) (0x007ffffeb700d0)
+  3 0x006ffff8cf5f9b in _multiarray_umath.cp310-win_amd (+0x5f9b) (0x007ffffeb700d0)
+  4 0x006ffff8d71af5 in _multiarray_umath.cp310-win_amd (+0x81af5) (0x007ffffeb700d0)
+  5 0x006ffff8e2d74a in _multiarray_umath.cp310-win_amd (+0x13d74a) (0x0070ec80266118)
+  6 0x006ffff8e2d58f in _multiarray_umath.cp310-win_amd (+0x13d58f) (0x0070ec805d95b0)
+  7 0x006ffff8e2be92 in _multiarray_umath.cp310-win_amd (+0x13be92) (0x0070ec80215c40)
+  8 0x006ffff8e30838 in _multiarray_umath.cp310-win_amd (+0x140838) (0x006ffff9037c20)
+  9 0x006ffff8e56dc6 in _multiarray_umath.cp310-win_amd (+0x166dc6) (0x0070ec805d99e0)
+  10 0x006ffff8e5e54c in _multiarray_umath.cp310-win_amd (+0x16e54c) (0000000000000000)
+  11 0x006ffff8dcaf96 in _multiarray_umath.cp310-win_amd (+0xdaf96) (0000000000000000)
+  12 0x006ffffad032d0 in python310 (+0xc32d0) (0000000000000000)
+  13 0x006ffffad034e5 in python310 (+0xc34e5) (0x007fffffd54ac0)
+  14 0x006ffffad03439 in python310 (+0xc3439) (0x007ffffec068e0)
+  15 0x006ffffacaa867 in python310 (+0x6a867) (0x007ffffec068e0)
+  16 0x006ffffac9bfb0 in python310 (+0x5bfb0) (0x007ffffe8ec010)
+  17 0x006ffffac9bd93 in python310 (+0x5bd93) (0x007fffffd58680)
+  18 0x006ffffac9becb in python310 (+0x5becb) (0x007ffffec25b70)
+  19 0x006ffffacbb5e7 in python310 (+0x7b5e7) (0x0070ec805db910)
+  20 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805dbcb0)
+  21 0x006ffffacb7293 in python310 (+0x77293) (0x0070ec805dbcb0)
+  22 0x006ffffacb6a94 in python310 (+0x76a94) (0x0070ec805dc000)
+  23 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805dc3a0)
+  24 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805dc3a0)
+  25 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805dc740)
+  26 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805dc740)
+  27 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805dcae0)
+  28 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805dcae0)
+  29 0x006ffffacb49d7 in python310 (+0x749d7) (0x007ffffe8ec010)
+  30 0x006ffffac9e9cd in python310 (+0x5e9cd) (0x007ffffe8ec010)
+  31 0x006ffffac9ce67 in python310 (+0x5ce67) (0x0070ec805dcec0)
+  32 0x006ffffac9cd44 in python310 (+0x5cd44) (0000000000000000)
+  33 0x006ffffaccbad5 in python310 (+0x8bad5) (0000000000000000)
+  34 0x006ffffac59c39 in python310 (+0x19c39) (0x007fffffd4d2a0)
+  35 0x006ffffad7a6fa in python310 (+0x13a6fa) (0x007ffffeb700d0)
+  36 0x006ffffacbd5b9 in python310 (+0x7d5b9) (0x0070ec805dd160)
+  37 0x006ffffac6a1cd in python310 (+0x2a1cd) (0x007fffffd33520)
+  38 0x006ffffaccad06 in python310 (+0x8ad06) (0x007fffffd33520)
+  39 0x006ffffaccab8f in python310 (+0x8ab8f) (0x006ffffb02a7f8)
+  40 0x006ffffaccaa8f in python310 (+0x8aa8f) (0x007fffffd58180)
+  41 0x006ffffacaa867 in python310 (+0x6a867) (0x007ffffec04bd0)
+  42 0x006ffffac9bfb0 in python310 (+0x5bfb0) (0x007ffffe8ec010)
+  43 0x006ffffac9bd93 in python310 (+0x5bd93) (0x007fffffd58280)
+  44 0x006ffffac9becb in python310 (+0x5becb) (0x007ffffec050d0)
+  45 0x006ffffacbb5e7 in python310 (+0x7b5e7) (0x0070ec805dd730)
+  46 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805ddad0)
+  47 0x006ffffacb7293 in python310 (+0x77293) (0x0070ec805ddad0)
+  48 0x006ffffacb6a94 in python310 (+0x76a94) (0x0070ec805dde20)
+  49 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805de1c0)
+  50 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805de1c0)
+  51 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805de560)
+  52 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805de560)
+  53 0x006ffffacb49d7 in python310 (+0x749d7) (0x007ffffe8ec010)
+  54 0x006ffffac9e9cd in python310 (+0x5e9cd) (0x007ffffe8ec010)
+  55 0x006ffffac9ce67 in python310 (+0x5ce67) (0x0070ec805de940)
+  56 0x006ffffac9cd44 in python310 (+0x5cd44) (0000000000000000)
+  57 0x006ffffaccbad5 in python310 (+0x8bad5) (0000000000000000)
+  58 0x006ffffac59c39 in python310 (+0x19c39) (0x007fffffd4eb50)
+  59 0x006ffffac5862d in python310 (+0x1862d) (0x0070ec805deab0)
+  60 0x006ffffac59eea in python310 (+0x19eea) (0x007fffffd53e00)
+  61 0x006ffffac9bdce in python310 (+0x5bdce) (0x007fffffd53e00)
+  62 0x006ffffac9becb in python310 (+0x5becb) (0x007ffffec04c70)
+  63 0x006ffffacbb5e7 in python310 (+0x7b5e7) (0x0070ec805dec80)
+  64 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805df020)
+  65 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805df020)
+  66 0x006ffffacb49d7 in python310 (+0x749d7) (0x007ffffe8ec010)
+  67 0x006ffffac9e9cd in python310 (+0x5e9cd) (0x007ffffe8ec010)
+  68 0x006ffffac9ce67 in python310 (+0x5ce67) (0x0070ec805df400)
+  69 0x006ffffac9cd44 in python310 (+0x5cd44) (0x007ffffeb78030)
+  70 0x006ffffac59c1c in python310 (+0x19c1c) (0x007ffffeb78030)
+  71 0x006ffffad7a6fa in python310 (+0x13a6fa) (0x007ffffeb700f0)
+  72 0x006ffffacbd5b9 in python310 (+0x7d5b9) (0x0070ec805df630)
+  73 0x006ffffac6a1cd in python310 (+0x2a1cd) (0x007fffffd32fa0)
+  74 0x006ffffaccad06 in python310 (+0x8ad06) (0x007fffffd32fa0)
+  75 0x006ffffaccab8f in python310 (+0x8ab8f) (0x006ffffb02a7f8)
+  76 0x006ffffaccaa8f in python310 (+0x8aa8f) (0x007fffffd512c0)
+  77 0x006ffffacaa867 in python310 (+0x6a867) (0x007ffffec04bd0)
+  78 0x006ffffac9bfb0 in python310 (+0x5bfb0) (0x007ffffe8ec010)
+  79 0x006ffffac9bd93 in python310 (+0x5bd93) (0x007fffffd51440)
+  80 0x006ffffac9becb in python310 (+0x5becb) (0x007ffffec050d0)
+  81 0x006ffffacbb5e7 in python310 (+0x7b5e7) (0x0070ec805dfc00)
+  82 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805dffa0)
+  83 0x006ffffacb7293 in python310 (+0x77293) (0x0070ec805dffa0)
+  84 0x006ffffacb6a94 in python310 (+0x76a94) (0x0070ec805e02f0)
+  85 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805e0690)
+  86 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805e0690)
+  87 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805e0a30)
+  88 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805e0a30)
+  89 0x006ffffacb49d7 in python310 (+0x749d7) (0x007ffffe8ec010)
+  90 0x006ffffac9e9cd in python310 (+0x5e9cd) (0x007ffffe8ec010)
+  91 0x006ffffac9ce67 in python310 (+0x5ce67) (0x0070ec805e0e10)
+  92 0x006ffffac9cd44 in python310 (+0x5cd44) (0000000000000000)
+  93 0x006ffffaccbad5 in python310 (+0x8bad5) (0000000000000000)
+  94 0x006ffffac59c39 in python310 (+0x19c39) (0x007fffffd4d6b0)
+  95 0x006ffffac5862d in python310 (+0x1862d) (0x0070ec805e0f80)
+  96 0x006ffffac59eea in python310 (+0x19eea) (0x007fffffd50dc0)
+  97 0x006ffffac9bdce in python310 (+0x5bdce) (0x007fffffd50dc0)
+  98 0x006ffffac9becb in python310 (+0x5becb) (0x007ffffec04c70)
+  99 0x006ffffacbb5e7 in python310 (+0x7b5e7) (0x0070ec805e1150)
+  100 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805e14f0)
+  101 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805e14f0)
+  102 0x006ffffacb49d7 in python310 (+0x749d7) (0x007ffffe8ec010)
+  103 0x006ffffac9e9cd in python310 (+0x5e9cd) (0x007ffffe8ec010)
+  104 0x006ffffac9ce67 in python310 (+0x5ce67) (0x0070ec805e18d0)
+  105 0x006ffffac9cd44 in python310 (+0x5cd44) (0x007ffffeb78030)
+  106 0x006ffffac59c1c in python310 (+0x19c1c) (0x007ffffeb78030)
+  107 0x006ffffad7a6fa in python310 (+0x13a6fa) (0x007ffffeb700f0)
+  108 0x006ffffacbd5b9 in python310 (+0x7d5b9) (0x0070ec805e1b00)
+  109 0x006ffffac6a1cd in python310 (+0x2a1cd) (0x007fffffd31e70)
+  110 0x006ffffaccad06 in python310 (+0x8ad06) (0x007fffffd31e70)
+  111 0x006ffffaccab8f in python310 (+0x8ab8f) (0x006ffffb02a7f8)
+  112 0x006ffffaccaa8f in python310 (+0x8aa8f) (0x007fffffd50600)
+  113 0x006ffffacaa867 in python310 (+0x6a867) (0x007ffffec04bd0)
+  114 0x006ffffac9bfb0 in python310 (+0x5bfb0) (0x007ffffe8ec010)
+  115 0x006ffffac9bd93 in python310 (+0x5bd93) (0x007fffffd50640)
+  116 0x006ffffac9becb in python310 (+0x5becb) (0x007ffffec050d0)
+  117 0x006ffffacbb5e7 in python310 (+0x7b5e7) (0x0070ec805e20d0)
+  118 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805e2470)
+  119 0x006ffffacb7293 in python310 (+0x77293) (0x0070ec805e2470)
+  120 0x006ffffacb6a94 in python310 (+0x76a94) (0x0070ec805e27c0)
+  121 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805e2b60)
+  122 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805e2b60)
+  123 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805e2f00)
+  124 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805e2f00)
+  125 0x006ffffacb49d7 in python310 (+0x749d7) (0x007ffffe8ec010)
+  126 0x006ffffac9e9cd in python310 (+0x5e9cd) (0x007ffffe8ec010)
+  127 0x006ffffac9ce67 in python310 (+0x5ce67) (0x0070ec805e32e0)
+  128 0x006ffffac9cd44 in python310 (+0x5cd44) (0000000000000000)
+  129 0x006ffffaccbad5 in python310 (+0x8bad5) (0000000000000000)
+  130 0x006ffffac59c39 in python310 (+0x19c39) (0x007fffffd50270)
+  131 0x006ffffac5862d in python310 (+0x1862d) (0x0070ec805e3450)
+  132 0x006ffffac59eea in python310 (+0x19eea) (0x007fffffd4b700)
+  133 0x006ffffac9bdce in python310 (+0x5bdce) (0x007fffffd4b700)
+  134 0x006ffffac9becb in python310 (+0x5becb) (0x007ffffec04c70)
+  135 0x006ffffacbb5e7 in python310 (+0x7b5e7) (0x0070ec805e3620)
+  136 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805e39c0)
+  137 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805e39c0)
+  138 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805e3d60)
+  139 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805e3d60)
+  140 0x006ffffacb49d7 in python310 (+0x749d7) (0x007ffffe8ec010)
+  141 0x006ffffac9e9cd in python310 (+0x5e9cd) (0x007ffffe8ec010)
+  142 0x006ffffac9ce67 in python310 (+0x5ce67) (0x0070ec805e4140)
+  143 0x006ffffac9cd44 in python310 (+0x5cd44) (0000000000000000)
+  144 0x006ffffaccbad5 in python310 (+0x8bad5) (0000000000000000)
+  145 0x006ffffac59c39 in python310 (+0x19c39) (0x007fffffd4d2a0)
+  146 0x006ffffad7a6fa in python310 (+0x13a6fa) (0x007ffffeb700d0)
+  147 0x006ffffacbd5b9 in python310 (+0x7d5b9) (0x0070ec805e43e0)
+  148 0x006ffffac6a1cd in python310 (+0x2a1cd) (0x007fffffd31b00)
+  149 0x006ffffaccad06 in python310 (+0x8ad06) (0x007fffffd31b00)
+  150 0x006ffffaccab8f in python310 (+0x8ab8f) (0x006ffffb02a7f8)
+  151 0x006ffffaccaa8f in python310 (+0x8aa8f) (0x007fffffd49800)
+  152 0x006ffffacaa867 in python310 (+0x6a867) (0x007ffffec04bd0)
+  153 0x006ffffac9bfb0 in python310 (+0x5bfb0) (0x007ffffe8ec010)
+  154 0x006ffffac9bd93 in python310 (+0x5bd93) (0x007fffffd4b440)
+  155 0x006ffffac9becb in python310 (+0x5becb) (0x007ffffec050d0)
+  156 0x006ffffacbb5e7 in python310 (+0x7b5e7) (0x0070ec805e49b0)
+  157 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805e4d50)
+  158 0x006ffffacb7293 in python310 (+0x77293) (0x0070ec805e4d50)
+  159 0x006ffffacb6a94 in python310 (+0x76a94) (0x0070ec805e50a0)
+  160 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805e5440)
+  161 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805e5440)
+  162 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805e57e0)
+  163 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805e57e0)
+  164 0x006ffffacb49d7 in python310 (+0x749d7) (0x007ffffe8ec010)
+  165 0x006ffffac9e9cd in python310 (+0x5e9cd) (0x007ffffe8ec010)
+  166 0x006ffffac9ce67 in python310 (+0x5ce67) (0x0070ec805e5bc0)
+  167 0x006ffffac9cd44 in python310 (+0x5cd44) (0000000000000000)
+  168 0x006ffffaccbad5 in python310 (+0x8bad5) (0000000000000000)
+  169 0x006ffffac59c39 in python310 (+0x19c39) (0x007fffffd36740)
+  170 0x006ffffad7a6fa in python310 (+0x13a6fa) (0x007ffffeb700d0)
+  171 0x006ffffacbd5b9 in python310 (+0x7d5b9) (0x0070ec805e5e60)
+  172 0x006ffffac6a1cd in python310 (+0x2a1cd) (0x007fffffd30a80)
+  173 0x006ffffaccad06 in python310 (+0x8ad06) (0x007fffffd30a80)
+  174 0x006ffffaccab8f in python310 (+0x8ab8f) (0x006ffffb02a7f8)
+  175 0x006ffffaccaa8f in python310 (+0x8aa8f) (0x007fffffd387c0)
+  176 0x006ffffacaa867 in python310 (+0x6a867) (0x007ffffec04bd0)
+  177 0x006ffffac9bfb0 in python310 (+0x5bfb0) (0x007ffffe8ec010)
+  178 0x006ffffac9bd93 in python310 (+0x5bd93) (0x007fffffd38980)
+  179 0x006ffffac9becb in python310 (+0x5becb) (0x007ffffec050d0)
+  180 0x006ffffacbb5e7 in python310 (+0x7b5e7) (0x0070ec805e6430)
+  181 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805e67d0)
+  182 0x006ffffacb7293 in python310 (+0x77293) (0x0070ec805e67d0)
+  183 0x006ffffacb6a94 in python310 (+0x76a94) (0x0070ec805e6b20)
+  184 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805e6ec0)
+  185 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805e6ec0)
+  186 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805e7260)
+  187 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805e7260)
+  188 0x006ffffacb49d7 in python310 (+0x749d7) (0x007ffffe8ec010)
+  189 0x006ffffac9e9cd in python310 (+0x5e9cd) (0x007ffffe8ec010)
+  190 0x006ffffac9ce67 in python310 (+0x5ce67) (0x0070ec805e7640)
+  191 0x006ffffac9cd44 in python310 (+0x5cd44) (0000000000000000)
+  192 0x006ffffaccbad5 in python310 (+0x8bad5) (0000000000000000)
+  193 0x006ffffac59c39 in python310 (+0x19c39) (0x007fffffd38430)
+  194 0x006ffffac5862d in python310 (+0x1862d) (0x0070ec805e77b0)
+  195 0x006ffffac59eea in python310 (+0x19eea) (0x007fffffd385c0)
+  196 0x006ffffac9bdce in python310 (+0x5bdce) (0x007fffffd385c0)
+  197 0x006ffffac9becb in python310 (+0x5becb) (0x007ffffec04c70)
+  198 0x006ffffacbb5e7 in python310 (+0x7b5e7) (0x0070ec805e7980)
+  199 0x006ffffacb49d7 in python310 (+0x749d7) (0x0070ec805e7d20)
+  200 0x006ffffacb6033 in python310 (+0x76033) (0x0070ec805e7d20)
+0x006fffff3ccf77 kernelbase+0xcf77: addq $0xc8, %rsp
+Modules:
+Module  Address                                 Debug info      Name (82 modules)
+PE             140000000-       14001a000       Deferred        python
+PE             180000000-       18000f000       Deferred        python3
+PE          6ffff78c0000-    6ffff794d000       Deferred        msvcp140-263139962577ecda4cd9469ca360a746
+PE          6ffff7960000-    6ffff8cdb000       Deferred        libscipy_openblas64_-13e2df515630b4a41f92893938845698
+PE          6ffff8cf0000-    6ffff9105000       Export          _multiarray_umath.cp310-win_amd64.pyd
+PE          6ffff9120000-    6ffff9142000       Deferred        _core.cp310-win_amd64.pyd
+PE          6ffff9eb0000-    6ffff9fc4000       Deferred        unicodedata.pyd
+PE          6ffff9fe0000-    6ffff9ff1000       Deferred        _hashlib.pyd
+PE          6ffffa010000-    6ffffa038000       Deferred        _lzma.pyd
+PE          6ffffa050000-    6ffffa065000       Deferred        _bz2.pyd
+PE          6ffffa080000-    6ffffa089000       Deferred        _queue.pyd
+PE          6ffffa0a0000-    6ffffa14e000       Deferred        libssl-1_1
+PE          6ffffa160000-    6ffffa4b2000       Deferred        libcrypto-1_1
+PE          6ffffa4d0000-    6ffffa4f8000       Deferred        _ssl.pyd
+PE          6ffffa510000-    6ffffa51b000       Deferred        win32event.pyd
+PE          6ffffa530000-    6ffffa53b000       Deferred        win32pipe.pyd
+PE-Wine     6ffffa550000-    6ffffa56e000       Deferred        sfc_os
+PE-Wine     6ffffa580000-    6ffffa5b7000       Deferred        vcruntime140_1
+PE          6ffffa5d0000-    6ffffa5f5000       Deferred        pywintypes310
+PE-Wine     6ffffa610000-    6ffffa62d000       Deferred        mswsock
+PE          6ffffa640000-    6ffffa667000       Deferred        win32file.pyd
+PE          6ffffa680000-    6ffffa689000       Deferred        select.pyd
+PE          6ffffa6a0000-    6ffffa6b5000       Deferred        _socket.pyd
+PE-Wine     6ffffa6d0000-    6ffffaaa5000       Deferred        crypt32
+PE-Wine     6ffffaac0000-    6ffffab23000       Deferred        bcrypt
+PE-Wine     6ffffab40000-    6ffffac00000       Deferred        rsaenh
+PE-Wine     6ffffac10000-    6ffffac2a000       Deferred        vcruntime140
+PE          6ffffac40000-    6ffffb091000       --none--        python310
+PE-Wine     6ffffb0b0000-    6ffffb0d0000       Deferred        version
+PE-Wine     6ffffb460000-    6ffffb485000       Deferred        nsi
+PE-Wine     6ffffb4a0000-    6ffffb4ef000       Deferred        dnsapi
+PE-Wine     6ffffb500000-    6ffffb59f000       Deferred        iphlpapi
+PE-Wine     6ffffb690000-    6ffffb712000       Deferred        imm32
+PE-Wine     6ffffb9a0000-    6ffffbd24000       Deferred        oleaut32
+PE-Wine     6ffffc770000-    6ffffc7c4000       Deferred        shcore
+PE-Wine     6ffffc7e0000-    6ffffc8f9000       Deferred        shlwapi
+PE-Wine     6ffffc910000-    6ffffd6ef000       Deferred        shell32
+PE-Wine     6ffffd700000-    6ffffd759000       Deferred        coml2
+PE-Wine     6ffffd770000-    6ffffda0a000       Deferred        rpcrt4
+PE-Wine     6ffffda20000-    6ffffda65000       Deferred        win32u
+PE-Wine     6ffffda80000-    6ffffe069000       Deferred        user32
+PE-Wine     6ffffe080000-    6ffffe354000       Deferred        gdi32
+PE-Wine     6ffffe370000-    6ffffe512000       Deferred        combase
+PE-Wine     6ffffe530000-    6ffffe908000       Deferred        ole32
+PE-Wine     6ffffe920000-    6ffffe9d3000       Deferred        ws2_32
+PE-Wine     6ffffe9f0000-    6ffffee15000       Dwarf-4         ucrtbase
+PE-Wine     6ffffee30000-    6ffffeebd000       Deferred        sechost
+PE-Wine     6ffffeed0000-    6fffff260000       Deferred        msvcrt
+PE-Wine     6fffff270000-    6fffff3a9000       Deferred        advapi32
+PE-Wine     6fffff3c0000-    6fffffa25000       Dwarf-4         kernelbase
+PE-Wine     6fffffa40000-    6fffffc07000       Deferred        kernel32
+PE-Wine     6fffffc20000-    6ffffffe5000       Deferred        ntdll
+ELF         70ec80655000-    70ec8065a000       Deferred        dnsapi.so
+ELF         70ec8065a000-    70ec80661000       Deferred        crypt32.so
+ELF         70ec8077c000-    70ec807a8000       Deferred        libexpat.so.1
+ELF         70ec807a8000-    70ec807f9000       Deferred        libfontconfig.so.1
+ELF         70ec807f9000-    70ec8081c000       Deferred        libbrotlicommon.so.1
+ELF         70ec8081c000-    70ec80854000       Deferred        libpng16.so.16
+ELF         70ec80854000-    70ec80868000       Deferred        libbz2.so.1.0
+ELF         70ec80868000-    70ec80884000       Deferred        libz.so.1
+ELF         70ec80884000-    70ec80950000       Deferred        libfreetype.so.6
+ELF         70ec80950000-    70ec80a39000       Deferred        libm.so.6
+ELF         70ec80a39000-    70ec80be9000       Deferred        win32u.so
+ELF         70ec80be9000-    70ec80c6d000       Deferred        libgmp.so.10
+ELF         70ec80c6d000-    70ec80cb5000       Deferred        libhogweed.so.6
+ELF         70ec80cb5000-    70ec80e62000       Deferred        libunistring.so.5
+ELF         70ec80e62000-    70ec81006000       Deferred        libp11-kit.so.0
+ELF         70ec81006000-    70ec81200000       Deferred        libgnutls.so.30
+ELF         70ec818eb000-    70ec81940000       Deferred        libnettle.so.8
+ELF         70ec81940000-    70ec81a00000       Export          ntdll.so
+ELF         70ec81a00000-    70ec81c12000       Deferred        libc.so.6
+ELF         70ec81c15000-    70ec81c23000       Deferred        libbrotlidec.so.1
+ELF         70ec81c23000-    70ec81c2f000       Deferred        libffi.so.8
+ELF         70ec81c2f000-    70ec81c45000       Deferred        libtasn1.so.6
+ELF         70ec81c45000-    70ec81c67000       Deferred        libidn2.so.0
+ELF         70ec81c7d000-    70ec81caf000       Deferred        liblzma.so.5
+ELF         70ec81caf000-    70ec81cca000       Deferred        libunwind.so.8
+ELF         70ec81cce000-    70ec81cdc000       Deferred        bcrypt.so
+ELF         70ec81cdc000-    70ec81ce3000       Deferred        ws2_32.so
+ELF         70ec81ce5000-    70ec81d1f000       Deferred        ld-linux-x86-64.so.2
+ELF         70ec81d1f000-    70ec81d24000       Deferred        <wine-loader>
+PE-Wine     7fffff270000-    7fffff272000       Deferred        sfc
+Threads:
+process  tid      prio    name (all IDs are in hex)
+00000038 services.exe
+	0000003c    0     
+	00000040    0     wine_rpcrt4_server
+	0000004c    0     wine_rpcrt4_io
+	0000005c    0     wine_rpcrt4_io
+	0000007c    0     wine_rpcrt4_io
+	00000094    0     wine_rpcrt4_io
+	000000b0    0     wine_rpcrt4_io
+	000000d4    0     wine_rpcrt4_io
+	000000e4    0     wine_rpcrt4_io
+	00000100    0     
+	0000010c    0     wine_rpcrt4_io
+00000044 winedevice.exe
+	00000048    0     
+	00000054    0     
+	00000058    0     wine_sechost_service
+	00000060    0     
+	00000064    0     
+	00000068    0     
+	000000a0    0     
+	000000a4    0     
+0000006c plugplay.exe
+	00000070    0     
+	00000080    0     
+	00000084    0     wine_sechost_service
+	00000088    0     wine_rpcrt4_server
+	000000f4    0     wine_rpcrt4_io
+00000074 explorer.exe
+	00000078    0     
+	000000c4    0     
+	000000c8    0     wine_explorer_display_settings_restorer
+	000000d0    0     wine_rpcrt4_server
+0000008c svchost.exe
+	00000090    0     
+	00000098    0     
+	0000009c    0     wine_sechost_service
+000000a8 winedevice.exe
+	000000ac    0     
+	000000b4    0     
+	000000b8    0     wine_sechost_service
+	000000bc    0     
+	000000c0    0     
+	000000d8    0     
+	000000e0    0     
+	000000ec    0     
+	000000f0    0     
+00000104 rpcss.exe
+	00000108    0     
+	00000110    0     
+	00000114    0     wine_sechost_service
+	00000118    0     wine_rpcrt4_server
+	0000011c    0     wine_rpcrt4_server
+	00000120    0     wine_rpcrt4_io
+00000150 terminal64.exe
+	00000154    0     main
+	0000015c    0     ioport dispatcher
+	00000160    0     ioport pool thread
+	00000164    0     ioport pool thread
+	00000168    0     python interprocess
+	00000178    0     symbols
+	00000180    0     wine_rpcrt4_server
+	00000188    0     history symbol EURUSD
+	0000018c    0     
+	00000190    0     
+	00000194    0     
+	00000198    0     history symbol USDCHF
+	0000019c    0     
+	000001a0    0     
+	000001a4    0     
+	000001a8    0     history symbol GBPUSD
+	000001ac    0     
+	000001b0    0     
+	000001b4    0     
+	000001b8    0     history symbol USDJPY
+	000001bc    0     
+	000001c0    0     
+	000001c4    0     
+	000001c8    0     net dispatcher
+	000001d4    0     wine_mmdevapi_notification
+	000001d8   15     audio_client_main
+00000268 start.exe
+	0000026c    0     
+00000270 conhost.exe
+	00000274    0     
+	00000280    0     
+00000278 (D) C:\Program Files\Python310\python.exe
+	0000027c    0     
+	00000284    0     
+	00000290    0 <== 
+	00000294    0     
+	000002a0    0     
+System information:
+    Wine build: wine-10.0
+    Platform: x86_64 (guest: i386)
+    Version: Windows 10
+    Host system: Linux
+    Host version: 6.8.0-31-generic

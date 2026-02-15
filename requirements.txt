@@ -1,0 +1,13 @@
+
+pandas
+numpy
+yfinance
+matplotlib
+seaborn
+statsmodels
+scikit-learn
+scipy
+fredapi
+arch
+pyngrok
+flask
