@@ -53,9 +53,9 @@ if VPS_PARAM_DIR not in sys.path:
 
 import parameter
 
-MT5_LOGIN = 206905748
-MT5_PASSWORD = "Bima12345#"
-MT5_SERVER = "Exness-MT5Trial7"
+MT5_LOGIN = Your_MT5_username
+MT5_PASSWORD = "YOUR_MT5_PASSWORD"
+MT5_SERVER = "YOUR_MT5_SERVER"
 
 preprocessing_path = os.path.join(current_script_dir, 'preprocesing')
 if preprocessing_path not in sys.path:
@@ -67,7 +67,7 @@ from preprocesing.stationarity_test import test_and_stationarize_data as _test_a
 
 warnings.filterwarnings("ignore")
 
-COLAB_API_KEY_FOR_MONITOR = "bima_12345678"
+COLAB_API_KEY_FOR_MONITOR = "YOUR_API_KEY"
 COLAB_URL_FILE_PATH = os.path.join(VPS_DATA_DIR, "colab_ngrok_url.txt")
 
 TRADE_ENGINE_API_URL = "http://127.0.0.1:8081/receive_signal"

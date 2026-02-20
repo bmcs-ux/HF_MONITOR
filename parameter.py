@@ -17,13 +17,6 @@ PAIRS = {
 #    "US30": "US30m"
 }
 
-# New parameters for local CSV usage
-USE_LOCAL_CSV_FOR_PAIRS = False # Changed to True
-LOCAL_CSV_FILEPATH = '/content/drive/MyDrive/books/VARX_REGRESION/combined_data.csv'
-
-# Data window & base interval to download for MAIN pipeline
-lookback_days = 42           # Changed to 50 days
-base_interval = "1d"         # Changed to 30m interval for better OHLC data availability
 
 # NEW: Data window & base interval to download for HIGH-FREQUENCY MONITORING
 HF_LOOKBACK_DAYS = 30         # e.g., last 6 days for high-frequency data
@@ -82,7 +75,7 @@ FRED_SERIES = {
     "5-Year Breakeven Inflation Rate: Treas..": "T5YIE",
     "Effective Federal Funds Rate" : "DFF"
 }
-FRED_API_KEY = "987d18495a386165f0be970f8a733562"
+FRED_API_KEY = "YOUR_FRED_API_KEY" #if you don't have fred api key, go to fred website follow instruction for get your api key
 
 forecast_horizon = 2
 
