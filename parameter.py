@@ -113,3 +113,9 @@ TP_RR_RATIO = 1.0
 FORECAST_OUTPUT_PATH = '/content/drive/MyDrive/books/VARX_REGRESION/restored_forecasts.pkl'
 FRED_DATA_PATH = '/content/drive/MyDrive/books/VARX_REGRESION/final_fred_data.pkl'
 FITTED_MODELS_PATH = '/content/drive/MyDrive/books/VARX_REGRESION/fitted_models.pkl' # NEW: Path for fitted VARX/ARX models
+
+
+# Adaptive safeguards for mixed-timeframe RLS monitoring
+RLS_VOLATILITY_WINDOW = 96
+RLS_MIN_INNOVATION_SCALE = 0.5
+RLS_DEVIATION_ADAPTIVE_STD_MULTIPLIER = 0.5

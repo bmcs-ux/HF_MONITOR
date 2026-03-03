@@ -72,6 +72,9 @@ COLAB_URL_FILE_PATH = os.path.join(VPS_DATA_DIR, "colab_ngrok_url.txt")
 
 TRADE_ENGINE_API_URL = "http://127.0.0.1:8081/receive_signal"
 
+# Runtime cache untuk stabilisasi metrik antar-siklus
+PAIR_REALIZED_STD_CACHE = {}
+
 def format_for_dashboard(rls_forecasts, latest_prices):
     """
     Menyederhanakan data RLS agar langsung bisa dibaca oleh JavaScript Dashboard.
@@ -656,6 +659,12 @@ def detect_price_deviation(log_stream, latest_actual_prices: dict, restored_pric
                 forecast_std = (upper_ci - predicted_mean) / z_score_value if z_score_value != 0 else np.nan
                 if np.isnan(forecast_std) or forecast_std <= 0:
                     forecast_std = (predicted_mean - lower_ci) / z_score_value if z_score_value != 0 else np.nan
+
+                adaptive_std_floor = PAIR_REALIZED_STD_CACHE.get(pair_name, np.nan)
+                adaptive_multiplier = getattr(parameter, "RLS_DEVIATION_ADAPTIVE_STD_MULTIPLIER", 0.5)
+                if pd.notnull(adaptive_std_floor) and adaptive_std_floor > 0:
+                    forecast_std = max(forecast_std, adaptive_std_floor * adaptive_multiplier)
+
                 deviation_info['forecast_std'] = float(forecast_std)
 
                 log_stream.write(f"    [INFO] Forecasted Mean: {predicted_mean:.4f}, CI: [{lower_ci:.4f}, {upper_ci:.4f}]\n")
@@ -880,7 +889,9 @@ def start_realtime_monitoring(
                         'exog_names': exog_names_group,
                         'maxlags': parameter.maxlag_test,
                         'rls_update_count': 0,
-                        'pred_variance_history': []
+                        'pred_variance_history': [],
+                        'last_update_bar_timestamp': None,
+                        'last_Y_t': None
                     }
                     log_stream_main.write(f"  [OK] RLS initialized for group {group_name}. Theta shape: {initial_theta.shape}, P shape: {initial_P.shape}\n")
                     log_stream_main.flush()
@@ -971,6 +982,16 @@ def start_realtime_monitoring(
             parameter_deviations = {}
             confidence_per_group = {}
             rls_param_deviation_score = 0.0
+
+            PAIR_REALIZED_STD_CACHE.clear()
+            volatility_window = int(getattr(parameter, "RLS_VOLATILITY_WINDOW", 96))
+            for pair_name, pair_df in hf_raw_data_dfs.items():
+                if pair_df.empty or 'Close' not in pair_df.columns:
+                    continue
+                close_std = pair_df['Close'].astype(float).tail(volatility_window).std()
+                if pd.notnull(close_std) and close_std > 0:
+                    PAIR_REALIZED_STD_CACHE[pair_name] = float(close_std)
+
             for group_name, estimator_data in rls_estimators.items():
                 current_theta = estimator_data['theta']
                 current_P = estimator_data['P']
@@ -1007,12 +1028,42 @@ def start_realtime_monitoring(
 
                 Phi = _build_regressor_matrix(log_stream, latest_hf_combined_log_returns_df_row, latest_hf_fred_exog_df_row, lagged_hf_log_returns_df, maxlags, endog_names_group, exog_names_group)
 
-                updated_theta, updated_P = _perform_rls_update(log_stream, current_theta, current_P, Phi, Y_t, parameter.FORGETTING_FACTOR)
+                last_update_bar_timestamp = estimator_data.get("last_update_bar_timestamp")
+                current_bar_timestamp = latest_hf_combined_log_returns_df_row.index[-1]
 
-                estimator_data['theta'] = updated_theta
-                estimator_data['P'] = updated_P
+                last_Y_t = estimator_data.get("last_Y_t")
+                recent_endog_std = np.nanstd(
+                    hf_combined_log_returns_df[endog_names_group].tail(volatility_window).values
+                )
+                if np.isnan(recent_endog_std) or recent_endog_std <= 0:
+                    recent_endog_std = 1e-12
 
-                estimator_data["rls_update_count"] += 1
+                min_innovation_scale = getattr(parameter, "RLS_MIN_INNOVATION_SCALE", 0.5)
+                innovation_threshold = min_innovation_scale * recent_endog_std
+                innovation_norm = float("inf") if last_Y_t is None else float(np.linalg.norm(Y_t - last_Y_t))
+
+                should_update_rls = True
+                if last_update_bar_timestamp is not None and current_bar_timestamp <= last_update_bar_timestamp:
+                    should_update_rls = False
+                    log_stream.write(
+                        f"    [INFO] {group_name}: RLS update skipped (no new candle).\n"
+                    )
+                elif innovation_norm < innovation_threshold:
+                    should_update_rls = False
+                    log_stream.write(
+                        f"    [INFO] {group_name}: RLS update skipped (innovation {innovation_norm:.6e} < threshold {innovation_threshold:.6e}).\n"
+                    )
+
+                if should_update_rls:
+                    updated_theta, updated_P = _perform_rls_update(log_stream, current_theta, current_P, Phi, Y_t, parameter.FORGETTING_FACTOR)
+                    estimator_data['theta'] = updated_theta
+                    estimator_data['P'] = updated_P
+                    estimator_data["rls_update_count"] += 1
+                    estimator_data["last_update_bar_timestamp"] = current_bar_timestamp
+                    estimator_data["last_Y_t"] = Y_t.copy()
+                else:
+                    updated_theta, updated_P = current_theta, current_P
+
                 n_rls_updates = estimator_data["rls_update_count"]
 
                 try:
@@ -1362,7 +1413,7 @@ def start_realtime_monitoring(
                         # 5. Logika RLS Direction Flip (Exit Early)
                         latest_actual_price = latest_hf_actual_prices.get(mapped_pair_name)
                         hf_atr = latest_hf_atrs.get(mapped_pair_name)
-                        RLS_FLIP_EPS = forecast_std_return * 1  # Gunakan 10% dari volatilitas model
+                        RLS_FLIP_EPS = forecast_std_return * 1  # Gunakan 1x volatilitas model
 
                         close_due_to_rls_flip = (
                             (is_buy and rls_expected_return < -RLS_FLIP_EPS) or
