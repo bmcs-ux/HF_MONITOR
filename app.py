@@ -12,6 +12,9 @@ vps_data_store = {
     "rls_forecast": {},
     "rls_health": {},
     "latest_actual_prices": {},
+    "trade_signals": {},
+    "parameter_deviations": {},
+    "global_metrics": {},
     "summary": {"status": "WAITING", "time": "-"},
     "equity_history": [], # Tambahkan ini untuk menampung data grafik
     "financials": {
@@ -358,6 +361,23 @@ def receive_data():
             else:
                 vps_data_store['rls_forecast'][sym] = val
 
+    new_signals = data.get('trade_signals')
+    if new_signals:
+        vps_data_store['trade_signals'] = new_signals
+        vps_data_store['signals'] = new_signals
+
+    new_parameter_deviations = data.get('parameter_deviations')
+    if new_parameter_deviations:
+        vps_data_store['parameter_deviations'] = new_parameter_deviations
+
+    new_global_metrics = data.get('global_metrics')
+    if new_global_metrics:
+        vps_data_store['global_metrics'] = new_global_metrics
+
+    vps_data_store['summary'] = {
+        "status": "RUNNING",
+        "time": data.get('timestamp', datetime.datetime.now().isoformat())
+    }
 
     return jsonify({"status": "success"}), 200
 
