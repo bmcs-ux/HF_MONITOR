@@ -119,3 +119,28 @@ FITTED_MODELS_PATH = '/content/drive/MyDrive/books/VARX_REGRESION/fitted_models.
 RLS_VOLATILITY_WINDOW = 96
 RLS_MIN_INNOVATION_SCALE = 0.5
 RLS_DEVIATION_ADAPTIVE_STD_MULTIPLIER = 0.5
+
+
+# Multi-timeframe consensus & execution tuning
+CONSENSUS_WEIGHT_D1 = 0.5
+CONSENSUS_WEIGHT_H1 = 0.3
+CONSENSUS_WEIGHT_M15 = 0.2
+CONSENSUS_THRESHOLD = 0.15
+
+# DCC proxy controls (contagion -> wider risk envelope)
+DCC_RISK_MULTIPLIER = 0.5
+DCC_FLIP_EPS_MULTIPLIER = 0.5
+
+# Mean reversion monitor gates
+MEAN_REVERSION_HIGH_Z = 2.5
+MEAN_REVERSION_LOW_VOL_PREDVAR = 0.002
+
+# Kalman execution filter defaults (M1)
+KALMAN_F = [[1, 1], [0, 1]]
+KALMAN_H = [[1, 0]]
+KALMAN_Q = [[0.0001, 0.0], [0.0, 0.0001]]
+KALMAN_R = [[0.000001]]
+KALMAN_INITIAL_STATE = [1.0, 0.0]
+KALMAN_INITIAL_P = [[0.1, 0.0], [0.0, 0.1]]
+KALMAN_ZSCORE_WINDOW = 120
+KALMAN_FLIP_ZSCORE = 3.0

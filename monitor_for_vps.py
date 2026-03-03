@@ -74,6 +74,7 @@ TRADE_ENGINE_API_URL = "http://127.0.0.1:8081/receive_signal"
 
 # Runtime cache untuk stabilisasi metrik antar-siklus
 PAIR_REALIZED_STD_CACHE = {}
+KALMAN_STATE_CACHE = {}
 
 def format_for_dashboard(rls_forecasts, latest_prices):
     """
@@ -692,6 +693,70 @@ def detect_price_deviation(log_stream, latest_actual_prices: dict, restored_pric
     log_stream.write(f"\n[OK] Price deviation detection completed.\n")
     return deviation_results
 
+def _run_kalman_filter_step(pair_name: str, observed_price: float):
+    state_data = KALMAN_STATE_CACHE.get(pair_name)
+
+    F = np.array(getattr(parameter, "KALMAN_F", [[1, 1], [0, 1]]), dtype=float)
+    H = np.array(getattr(parameter, "KALMAN_H", [[1, 0]]), dtype=float)
+    Q = np.array(getattr(parameter, "KALMAN_Q", [[1e-4, 0], [0, 1e-4]]), dtype=float)
+    R = np.array(getattr(parameter, "KALMAN_R", [[1e-6]]), dtype=float)
+
+    if state_data is None:
+        x = np.array(getattr(parameter, "KALMAN_INITIAL_STATE", [observed_price, 0.0]), dtype=float).reshape(-1, 1)
+        P = np.array(getattr(parameter, "KALMAN_INITIAL_P", [[0.1, 0], [0, 0.1]]), dtype=float)
+        state_data = {"x": x, "P": P, "innovation_history": []}
+
+    x_prior = F @ state_data["x"]
+    P_prior = F @ state_data["P"] @ F.T + Q
+
+    z = np.array([[float(observed_price)]])
+    innovation = z - (H @ x_prior)
+    S = H @ P_prior @ H.T + R
+    K = P_prior @ H.T @ np.linalg.pinv(S)
+
+    x_post = x_prior + K @ innovation
+    P_post = (np.eye(P_prior.shape[0]) - K @ H) @ P_prior
+
+    state_data["x"] = x_post
+    state_data["P"] = P_post
+    innovation_value = float(innovation.ravel()[0])
+    state_data["innovation_history"].append(innovation_value)
+    if len(state_data["innovation_history"]) > int(getattr(parameter, "KALMAN_ZSCORE_WINDOW", 120)):
+        state_data["innovation_history"] = state_data["innovation_history"][-int(getattr(parameter, "KALMAN_ZSCORE_WINDOW", 120)):]
+
+    innovation_std = float(np.std(state_data["innovation_history"])) if len(state_data["innovation_history"]) > 1 else 1e-12
+    if innovation_std <= 0:
+        innovation_std = 1e-12
+
+    innovation_zscore = innovation_value / innovation_std
+    kalman_trend = "UP" if float(x_post[1, 0]) >= 0 else "DOWN"
+
+    KALMAN_STATE_CACHE[pair_name] = state_data
+    return {
+        "filtered_price": float(x_post[0, 0]),
+        "velocity": float(x_post[1, 0]),
+        "innovation": innovation_value,
+        "innovation_zscore": float(innovation_zscore),
+        "trend": kalman_trend
+    }
+
+
+def _signal_from_return(expected_return_value: float) -> str:
+    return "BUY" if expected_return_value >= 0 else "SELL"
+
+
+def _compute_consensus_score(signal_d1: str, signal_h1: str, signal_m15: str) -> float:
+    weight_d1 = float(getattr(parameter, "CONSENSUS_WEIGHT_D1", 0.5))
+    weight_h1 = float(getattr(parameter, "CONSENSUS_WEIGHT_H1", 0.3))
+    weight_m15 = float(getattr(parameter, "CONSENSUS_WEIGHT_M15", 0.2))
+
+    return (
+        (1.0 if signal_d1 == 'BUY' else -1.0) * weight_d1 +
+        (1.0 if signal_h1 == 'BUY' else -1.0) * weight_h1 +
+        (1.0 if signal_m15 == 'BUY' else -1.0) * weight_m15
+    )
+
+
 def send_monitoring_data_to_colab(data: dict, log_stream):
     data_converted = convert_numpy_floats(data)
 
@@ -982,6 +1047,10 @@ def start_realtime_monitoring(
             parameter_deviations = {}
             confidence_per_group = {}
             rls_param_deviation_score = 0.0
+            dcc_group_metrics = {}
+            kalman_metrics = {}
+            consensus_metrics = {}
+            mean_reversion_candidates = {}
 
             PAIR_REALIZED_STD_CACHE.clear()
             volatility_window = int(getattr(parameter, "RLS_VOLATILITY_WINDOW", 96))
@@ -1001,6 +1070,21 @@ def start_realtime_monitoring(
                 endog_names_group = estimator_data['endog_names']
                 exog_names_group = estimator_data['exog_names']
                 maxlags = estimator_data['maxlags']
+
+                try:
+                    group_returns_for_corr = hf_combined_log_returns_df[endog_names_group].tail(volatility_window)
+                    corr_matrix = group_returns_for_corr.corr().values
+                    if corr_matrix.shape[0] > 1:
+                        upper = np.triu(np.abs(corr_matrix), k=1)
+                        non_zero = upper[upper > 0]
+                        contagion_score = float(np.mean(non_zero)) if non_zero.size else 0.0
+                    else:
+                        contagion_score = 0.0
+                except Exception:
+                    contagion_score = 0.0
+                dcc_group_metrics[group_name] = {
+                    "contagion_score": float(np.clip(contagion_score, 0.0, 1.0))
+                }
 
                 latest_hf_combined_log_returns_df_row = hf_combined_log_returns_df.iloc[[-1]]
                 latest_hf_fred_exog_df_row = hf_fred_exog_aligned.iloc[[-1]] if not hf_fred_exog_aligned.empty else pd.DataFrame()
@@ -1109,6 +1193,15 @@ def start_realtime_monitoring(
                     "deviation": float(deviation_norm),
                     "pred_var": float(pred_variance)
                 }
+
+                mean_reversion_z = float(deviation_norm / (np.sqrt(pred_variance) + 1e-12))
+                low_vol_gate = float(getattr(parameter, "MEAN_REVERSION_LOW_VOL_PREDVAR", 0.002))
+                high_dev_gate = float(getattr(parameter, "MEAN_REVERSION_HIGH_Z", 2.5))
+                if mean_reversion_z >= high_dev_gate and pred_variance <= low_vol_gate:
+                    mean_reversion_candidates[group_name] = {
+                        "zscore": mean_reversion_z,
+                        "pred_var": float(pred_variance)
+                    }
                 confidence_per_group[group_name] = confidence
                 parameter_deviations[group_name] = float(deviation_norm)
 
@@ -1265,6 +1358,9 @@ def start_realtime_monitoring(
                         log_stream.write("[ERROR] Could not get account info, using fallback equity.\n")
                         current_equity = parameter.EQUITY # Fallback
 
+                    group_dcc_score = dcc_group_metrics.get(pair_group, {}).get("contagion_score", 0.0)
+                    dcc_risk_multiplier = 1 + (group_dcc_score * float(getattr(parameter, "DCC_RISK_MULTIPLIER", 0.5)))
+
                     signal = decide_trade(
                         log_stream=log_stream,
                         pair_name=pair_name,
@@ -1275,13 +1371,45 @@ def start_realtime_monitoring(
                         hf_atr=latest_hf_atrs[pair_name],
                         equity=current_equity,
                         risk_pct=parameter.RISK_PER_TRADE_PCT,
-                        k_atr_stop=parameter.K_ATR_STOP,
-                        k_model_stop=parameter.K_MODEL_STOP,
+                        k_atr_stop=parameter.K_ATR_STOP * dcc_risk_multiplier,
+                        k_model_stop=parameter.K_MODEL_STOP * dcc_risk_multiplier,
                         snr_threshold=parameter.SNR_THRESHOLD,
                         rls_param_deviation_score=pair_rls_deviation,
                         rls_deviation_threshold=parameter.RLS_DEVIATION_THRESHOLD,
                         tp_rr_ratio=parameter.TP_RR_RATIO
                     )
+
+                    kalman_result = _run_kalman_filter_step(pair_name, latest_hf_actual_prices[pair_name])
+                    kalman_metrics[pair_name] = kalman_result
+
+                    signal_d1 = "BUY" if predicted_mean >= latest_hf_actual_prices[pair_name] else "SELL"
+                    signal_h1 = _signal_from_return(rls_expected_return)
+                    signal_m15 = signal.get("signal", "HOLD") if signal.get("signal") in ("BUY", "SELL") else signal_h1
+
+                    consensus_score = _compute_consensus_score(signal_d1, signal_h1, signal_m15)
+                    consensus_threshold = float(getattr(parameter, "CONSENSUS_THRESHOLD", 0.15))
+                    consensus_metrics[pair_name] = {
+                        "score": float(consensus_score),
+                        "signal_d1": signal_d1,
+                        "signal_h1": signal_h1,
+                        "signal_m15": signal_m15,
+                        "kalman_trend": kalman_result["trend"],
+                        "kalman_z": float(kalman_result["innovation_zscore"])
+                    }
+
+                    if signal.get("signal") == "BUY":
+                        if not (consensus_score >= consensus_threshold and kalman_result["trend"] == "UP"):
+                            signal["signal"] = "HOLD"
+                            signal["reason"] = "Consensus/Kalman gate blocked BUY"
+                    elif signal.get("signal") == "SELL":
+                        if not (consensus_score <= -consensus_threshold and kalman_result["trend"] == "DOWN"):
+                            signal["signal"] = "HOLD"
+                            signal["reason"] = "Consensus/Kalman gate blocked SELL"
+
+                    if abs(kalman_result["innovation_zscore"]) >= float(getattr(parameter, "KALMAN_FLIP_ZSCORE", 3.0)):
+                        signal["reason"] = f"Kalman structural break z={kalman_result['innovation_zscore']:.2f}"
+                        if signal.get("signal") != "HOLD":
+                            signal["signal"] = "HOLD"
 
                     trade_signals[pair_name] = signal
 
@@ -1343,6 +1471,10 @@ def start_realtime_monitoring(
                 "deviation_results": convert_numpy_floats(deviation_results),
                 "trade_signals": convert_numpy_floats(trade_signals),
                 "parameter_deviations": convert_numpy_floats(parameter_deviations),
+                "dcc_metrics": convert_numpy_floats(dcc_group_metrics),
+                "kalman_metrics": convert_numpy_floats(kalman_metrics),
+                "consensus_metrics": convert_numpy_floats(consensus_metrics),
+                "mean_reversion_candidates": convert_numpy_floats(mean_reversion_candidates),
                 "pipeline_run_id": pipeline_run_id_for_monitor,
                 "cycle_duration_seconds": float(time.time() - cycle_start_time),
                 "log_summary": f"Completed cycle {cycle_count}. Price deviation for {sum(1 for r in deviation_results.values() if r['ci_breach'])} pairs. Trade signals generated for {sum(1 for s in trade_signals.values() if s['signal'] != 'HOLD')} pairs."
@@ -1413,11 +1545,18 @@ def start_realtime_monitoring(
                         # 5. Logika RLS Direction Flip (Exit Early)
                         latest_actual_price = latest_hf_actual_prices.get(mapped_pair_name)
                         hf_atr = latest_hf_atrs.get(mapped_pair_name)
-                        RLS_FLIP_EPS = forecast_std_return * 1  # Gunakan 1x volatilitas model
+                        pair_group_for_flip = PAIR_TO_RLS_GROUP.get(mapped_pair_name)
+                        dcc_score_for_flip = dcc_group_metrics.get(pair_group_for_flip, {}).get("contagion_score", 0.0)
+                        dcc_flip_multiplier = 1 + (dcc_score_for_flip * float(getattr(parameter, "DCC_FLIP_EPS_MULTIPLIER", 0.5)))
+                        RLS_FLIP_EPS = forecast_std_return * dcc_flip_multiplier  # Gunakan volatilitas model yang disesuaikan contagion
+
+                        kalman_result_pos = _run_kalman_filter_step(mapped_pair_name, latest_actual_price)
+                        kalman_break = abs(kalman_result_pos["innovation_zscore"]) >= float(getattr(parameter, "KALMAN_FLIP_ZSCORE", 3.0))
 
                         close_due_to_rls_flip = (
                             (is_buy and rls_expected_return < -RLS_FLIP_EPS) or
-                            (is_sell and rls_expected_return > RLS_FLIP_EPS)
+                            (is_sell and rls_expected_return > RLS_FLIP_EPS) or
+                            kalman_break
                         )
 
                         if close_due_to_rls_flip:
@@ -1517,6 +1656,10 @@ def start_realtime_monitoring(
                 #"rls_forecast": convert_numpy_floats(rls_forecasts),
                 "trade_signals": convert_numpy_floats(trade_signals),
                 "parameter_deviations": convert_numpy_floats(parameter_deviations),
+                "dcc_metrics": convert_numpy_floats(dcc_group_metrics),
+                "kalman_metrics": convert_numpy_floats(kalman_metrics),
+                "consensus_metrics": convert_numpy_floats(consensus_metrics),
+                "mean_reversion_candidates": convert_numpy_floats(mean_reversion_candidates),
                 "pipeline_run_id": pipeline_run_id_for_monitor,
                 "global_metrics": {
                     "global_confidence": float(global_rls_confidence),
