@@ -12,6 +12,13 @@ vps_data_store = {
     "rls_forecast": {},
     "rls_health": {},
     "latest_actual_prices": {},
+    "trade_signals": {},
+    "parameter_deviations": {},
+    "global_metrics": {},
+    "dcc_metrics": {},
+    "kalman_metrics": {},
+    "consensus_metrics": {},
+    "mean_reversion_candidates": {},
     "summary": {"status": "WAITING", "time": "-"},
     "equity_history": [], # Tambahkan ini untuk menampung data grafik
     "financials": {
@@ -79,7 +86,7 @@ HTML_TEMPLATE = r"""
 
         <div class="card">
             <h3>Model Health</h3>
-            <div id="healthStatus" class="gauge-container">Menunggu dtaa...</div>
+            <div id="healthStatus" class="gauge-container">Menunggu data...</div>
         </div>
 
         <div class="card">
@@ -354,10 +361,43 @@ def receive_data():
         for sym, val in incoming_rls.items():
             if isinstance(val, dict):
                 p = val.get('rls_predicted_price') or val.get('predicted_price')
-                if p: vps_data_store['rls_forecast'][sym] = p
+                if p is not None: vps_data_store['rls_forecast'][sym] = p
             else:
                 vps_data_store['rls_forecast'][sym] = val
 
+    new_signals = data.get('trade_signals')
+    if new_signals:
+        vps_data_store['trade_signals'] = new_signals
+        vps_data_store['signals'] = new_signals
+
+    new_parameter_deviations = data.get('parameter_deviations')
+    if new_parameter_deviations:
+        vps_data_store['parameter_deviations'] = new_parameter_deviations
+
+    new_global_metrics = data.get('global_metrics')
+    if new_global_metrics:
+        vps_data_store['global_metrics'] = new_global_metrics
+
+    new_dcc_metrics = data.get('dcc_metrics')
+    if new_dcc_metrics:
+        vps_data_store['dcc_metrics'] = new_dcc_metrics
+
+    new_kalman_metrics = data.get('kalman_metrics')
+    if new_kalman_metrics:
+        vps_data_store['kalman_metrics'] = new_kalman_metrics
+
+    new_consensus_metrics = data.get('consensus_metrics')
+    if new_consensus_metrics:
+        vps_data_store['consensus_metrics'] = new_consensus_metrics
+
+    new_mean_reversion_candidates = data.get('mean_reversion_candidates')
+    if new_mean_reversion_candidates:
+        vps_data_store['mean_reversion_candidates'] = new_mean_reversion_candidates
+
+    vps_data_store['summary'] = {
+        "status": "RUNNING",
+        "time": data.get('timestamp', datetime.datetime.now().isoformat())
+    }
 
     return jsonify({"status": "success"}), 200
 
