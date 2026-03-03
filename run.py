@@ -129,7 +129,9 @@ display_kassandra_opening()
 
 # --- Configuration for VPS --- 
 # Set ROOT_DIR_VPS to the absolute path where your project is cloned on the VPS
-ROOT_DIR_VPS = "/home/bimachasin86/VARX_REGRESION/"
+import parameter
+
+ROOT_DIR_VPS = parameter.ROOT_DIR
 
 # Add the root directory to sys.path
 if ROOT_DIR_VPS not in sys.path:
@@ -178,6 +180,7 @@ import monitor_for_vps
 # This ensures the modules load data from the correct locations on the VPS
 parameter.VPS_PARAM_DIR = ROOT_DIR_VPS
 parameter.VPS_DATA_DIR = ROOT_DIR_VPS
+parameter.COLAB_URL_FILE_PATH = os.path.join(ROOT_DIR_VPS, "colab_ngrok_url.txt")
 trade_engine.VPS_PARAM_DIR = ROOT_DIR_VPS
 trade_engine.VPS_DATA_DIR = ROOT_DIR_VPS
 monitor_for_vps.VPS_PARAM_DIR = ROOT_DIR_VPS
@@ -185,14 +188,8 @@ monitor_for_vps.VPS_DATA_DIR = ROOT_DIR_VPS
 
 # --- Set Colab URL file path for both modules --- 
 colab_url_file = os.path.join(ROOT_DIR_VPS, 'colab_ngrok_url.txt')
-monitor_for_vps.COLAB_URL_FILE_PATH = colab_url_file
-trade_engine.COLAB_URL_FILE_PATH = colab_url_file
-
-# --- Temporary hack to ensure TRADE_ENGINE_API_KEY is available in parameter module ---
-# This is needed because monitor_for_vps needs to import it, 
-# but it's defined in trade_engine.py. On VPS, a shared config might be better.
-if not hasattr(parameter, 'TRADE_ENGINE_API_KEY'):
-    parameter.TRADE_ENGINE_API_KEY = trade_engine.TRADE_ENGINE_API_KEY
+monitor_for_vps.COLAB_URL_FILE_PATH = parameter.COLAB_URL_FILE_PATH
+trade_engine.COLAB_URL_FILE_PATH = parameter.COLAB_URL_FILE_PATH
 
 print("[RUN.PY] Starting VPS orchestration...")
 
