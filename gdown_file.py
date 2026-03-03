@@ -3,13 +3,15 @@ import subprocess
 import sys
 
 # ===== KONFIGURASI =====
-TARGET_DIR = "/home/bimachasin86/VARX_REGRESION/"
+TARGET_DIR = "/home/bimachasin86/VARX_REGRESION/fitted_models/"
 
 FILES = {
-    "18W02IYbmM8lmPKH1b3PSVzWjcoNhcl6T": "fitted_models.pkl",
-    "1_KEgF5kcuDA1q0raGpg3hE9uVxa4owCX": "colab_ngrok_url.txt",
-    "1j6riUUZT0TiIxOEtOACqKSSJROfb8RYD": "final_fred_data.pkl",
-    "1sa6gdcq9fqIj6dZd_xWiSFsPS8efN1k7" : "restored_forecasts.pkl",
+   # "18W02IYbmM8lmPKH1b3PSVzWjcoNhcl6T": "fitted_models.pkl",
+   # "1_KEgF5kcuDA1q0raGpg3hE9uVxa4owCX": "colab_ngrok_url.txt",
+   # "1j6riUUZT0TiIxOEtOACqKSSJROfb8RYD": "final_fred_data.pkl",
+   # "1sa6gdcq9fqIj6dZd_xWiSFsPS8efN1k7" : "restored_forecasts.pkl",
+    "1a2-Yg8R-sAaV1oPxjzFhGQNB9rMolXwZ" : "dcc_garch_process.py",
+    "1qujWljaEk0B_CSLNAAjr7xKRaq5f4wMw" : "dcc_garch.py"
 }
 
 # ===== PASTIKAN gdown TERINSTALL =====
