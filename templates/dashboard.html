@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CASSANDRA Dashboard</title>
+  <link rel="stylesheet" href="/static/dashboard.css" />
+</head>
+<body>
+  <header>
+    <h1>CASSANDRA PROJECT DASHBOARD</h1>
+    <div class="controls">
+      <button id="btn-monitor">Inject Monitor Sample</button>
+      <button id="btn-trade">Inject Trade Sample</button>
+      <button id="btn-reset" class="danger">Reset</button>
+    </div>
+  </header>
+
+  <section class="grid">
+    <div class="card"><h3>Summary</h3><pre id="summary">WAITING</pre></div>
+    <div class="card"><h3>Global Metrics</h3><pre id="global-metrics">-</pre></div>
+    <div class="card"><h3>Financials</h3><pre id="financials">-</pre></div>
+
+    <div class="card span2"><h3>RLS Health</h3><pre id="rls-health">-</pre></div>
+    <div class="card"><h3>DCC Metrics</h3><pre id="dcc-metrics">-</pre></div>
+
+    <div class="card"><h3>Kalman Metrics</h3><pre id="kalman-metrics">-</pre></div>
+    <div class="card"><h3>Consensus Metrics</h3><pre id="consensus-metrics">-</pre></div>
+    <div class="card"><h3>Mean Reversion</h3><pre id="mean-reversion">-</pre></div>
+
+    <div class="card span2"><h3>Price vs Forecast</h3><table><thead><tr><th>Symbol</th><th>Actual</th><th>Forecast</th><th>Δ%</th></tr></thead><tbody id="price-table"></tbody></table></div>
+    <div class="card"><h3>Trade Signals</h3><pre id="trade-signals">-</pre></div>
+
+    <div class="card"><h3>Open Trades</h3><pre id="open-trades">-</pre></div>
+    <div class="card span2"><h3>Recent Logs</h3><pre id="logs">-</pre></div>
+  </section>
+
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>

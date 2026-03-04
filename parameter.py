@@ -128,9 +128,9 @@ K_MODEL_STOP = 1.0
 SNR_THRESHOLD = 0.1
 TP_RR_RATIO = 1.0
 # Storage Paths
-FORECAST_OUTPUT_PATH = '/content/drive/MyDrive/books/VARX_REGRESION/restored_forecasts.pkl'
-FRED_DATA_PATH = '/content/drive/MyDrive/books/VARX_REGRESION/final_fred_data.pkl'
-FITTED_MODELS_PATH = '/content/drive/MyDrive/books/VARX_REGRESION/fitted_models.pkl' # NEW: Path for fitted VARX/ARX models
+FORECAST_OUTPUT_PATH = os.path.join(ROOT_DIR, 'restored_forecasts.pkl')
+FRED_DATA_PATH = os.path.join(ROOT_DIR, 'final_fred_data.pkl')
+FITTED_MODELS_PATH = os.path.join(ROOT_DIR, 'fitted_ensemble.pkl') # Path for fitted ensemble models
 
 
 # Adaptive safeguards for mixed-timeframe RLS monitoring
