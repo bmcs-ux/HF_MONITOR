@@ -3,7 +3,25 @@
 # --------------------------------
 # PARAMETERS (ubah sesuai kebutuhan)
 # --------------------------------
+import os
 import pandas as pd
+
+# Runtime and deployment configuration
+ROOT_DIR = os.getenv("HF_ROOT_DIR", "/home/bimachasin86/VARX_REGRESION")
+VPS_PARAM_DIR = ROOT_DIR
+VPS_DATA_DIR = ROOT_DIR
+
+# Credentials and API keys (set via environment variables in production)
+MT5_LOGIN = os.getenv("MT5_LOGIN", "YOUR_MT5_USERNAME")
+MT5_PASSWORD = os.getenv("MT5_PASSWORD", "YOUR_MT5_PASSWORD")
+MT5_SERVER = os.getenv("MT5_SERVER", "YOUR_MT5_SERVER")
+
+TRADE_ENGINE_API_KEY = os.getenv("TRADE_ENGINE_API_KEY", "bima_12345678")
+COLAB_API_KEY_FOR_TRADE_ENGINE = os.getenv("COLAB_API_KEY_FOR_TRADE_ENGINE", TRADE_ENGINE_API_KEY)
+COLAB_API_KEY_FOR_MONITOR = os.getenv("COLAB_API_KEY_FOR_MONITOR", TRADE_ENGINE_API_KEY)
+COLAB_URL_FILE_PATH = os.path.join(VPS_DATA_DIR, "colab_ngrok_url.txt")
+TRADE_ENGINE_API_URL = os.getenv("TRADE_ENGINE_API_URL", "http://127.0.0.1:8081/receive_signal")
+
 
 PAIRS = {
     "USD/CAD": "USDCADm",
@@ -110,9 +128,9 @@ K_MODEL_STOP = 1.0
 SNR_THRESHOLD = 0.1
 TP_RR_RATIO = 1.0
 # Storage Paths
-FORECAST_OUTPUT_PATH = '/content/drive/MyDrive/books/VARX_REGRESION/restored_forecasts.pkl'
-FRED_DATA_PATH = '/content/drive/MyDrive/books/VARX_REGRESION/final_fred_data.pkl'
-FITTED_MODELS_PATH = '/content/drive/MyDrive/books/VARX_REGRESION/fitted_models.pkl' # NEW: Path for fitted VARX/ARX models
+FORECAST_OUTPUT_PATH = os.path.join(ROOT_DIR, 'restored_forecasts.pkl')
+FRED_DATA_PATH = os.path.join(ROOT_DIR, 'final_fred_data.pkl')
+FITTED_MODELS_PATH = os.path.join(ROOT_DIR, 'fitted_ensemble.pkl') # Path for fitted ensemble models
 
 
 # Adaptive safeguards for mixed-timeframe RLS monitoring

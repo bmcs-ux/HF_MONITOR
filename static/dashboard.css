@@ -1,0 +1,13 @@
+body{font-family:Arial,sans-serif;background:#0f111a;color:#e6e6e6;margin:0;padding:16px}
+header{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+h1{font-size:20px;color:#4fc3f7;margin:0}
+.controls button{background:#263238;color:#fff;border:1px solid #455a64;padding:8px 10px;border-radius:6px;cursor:pointer}
+.controls .danger{background:#5d1f1f}
+.grid{margin-top:12px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.card{background:#1a1d29;border:1px solid #333;border-radius:8px;padding:10px}
+.card h3{margin:0 0 8px;color:#8bd3ff;font-size:13px}
+pre{margin:0;white-space:pre-wrap;font-size:12px;max-height:220px;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{border-bottom:1px solid #2c2f3b;padding:6px;text-align:left}
+.span2{grid-column:span 2}
+@media (max-width:900px){.grid{grid-template-columns:1fr}.span2{grid-column:span 1}}

@@ -30,7 +30,7 @@ Fokus utama dari modul ini adalah stabilitas, adaptabilitas parameter secara rea
 * `mt5_adapter.py`: Konektor khusus untuk menjembatani logika Python dengan terminal MetaTrader 5.
 * `trade_engine.py`: Inti dari logika perdagangan, manajemen posisi, dan eksekusi.
 * `news_manager.py`: Modul pemantau kalender ekonomi dan filter berita.
-* `fitted_models.pkl`: File container yang menyimpan state model ensemble terbaru.
+* `fitted_ensemble.pkl`: File container yang menyimpan state model ensemble terbaru (termasuk struktur per-timeframe dan model DCC-GARCH/Kalman).
 * `requirements.txt`: Daftar dependensi Python yang diperlukan.
 
 ---
@@ -69,7 +69,7 @@ Pastikan Anda telah mengisi API Key (FRED, dll) dan kredensial MT5 pada file `pa
 
 1. **Sync:** File `fitted_ensemble.pkl` dihasilkan oleh `main.py` (Cassandra Core) dan dikirim ke VPS.
 2. **Initialize:** `HF MONITOR` memuat model dan memulai koneksi ke provider data/broker.
-3. **Adapt:** Algoritma RLS mulai menyesuaikan parameter model berdasarkan data harga *tick* terbaru.
+3. **Adapt:** Algoritma RLS mulai menyesuaikan parameter model berdasarkan data *bar close* terbaru sesuai timeframe model (mis. update H1 dilakukan saat candle H1 close).
 4. **Execute:** Jika filter berita bersih dan sinyal model memenuhi syarat threshold, `trade_engine.py` akan mengirimkan perintah eksekusi.
 
 ---

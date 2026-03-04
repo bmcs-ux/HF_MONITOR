@@ -12,34 +12,33 @@ import traceback
 from mt5_adapter import MT5Adapter, MT5_TIMEFRAME_MAP
 from news_manager import NewsManager
 
-current_script_dir = "/home/bimachasin86/VARX_REGRESION"
-if current_script_dir not in sys.path:
-    sys.path.insert(0, current_script_dir)
-import vps_colab_connector
+import parameter
 
-ROOT_DIR_LOCAL = '/home/bimachasin86/VARX_REGRESION'
-VPS_PARAM_DIR = ROOT_DIR_LOCAL
-VPS_DATA_DIR = ROOT_DIR_LOCAL
+ROOT_DIR_LOCAL = parameter.ROOT_DIR
+VPS_PARAM_DIR = parameter.VPS_PARAM_DIR
+VPS_DATA_DIR = parameter.VPS_DATA_DIR
 
+if ROOT_DIR_LOCAL not in sys.path:
+    sys.path.insert(0, ROOT_DIR_LOCAL)
 if VPS_PARAM_DIR not in sys.path:
     sys.path.insert(0, VPS_PARAM_DIR)
 
-import parameter
+import vps_colab_connector
 
-MT5_LOGIN = YOUR_MT5_USERNAME
-MT5_PASSWORD = "YOUR_MT5_PASSWORD"
-MT5_SERVER = "YOUR_MT5_SERVER"
+MT5_LOGIN = parameter.MT5_LOGIN
+MT5_PASSWORD = parameter.MT5_PASSWORD
+MT5_SERVER = parameter.MT5_SERVER
 
 DEFAULT_VOLUME = 0.01
 SLIPPAGE = 20
 MAGIC_NUMBER = 202401
 
 app = Flask(__name__)
-TRADE_ENGINE_API_KEY = "bima_12345678"
+TRADE_ENGINE_API_KEY = parameter.TRADE_ENGINE_API_KEY
 TRADE_ENGINE_API_PORT = 8081
 
-COLAB_API_KEY_FOR_TRADE_ENGINE = "bima_12345678"
-COLAB_URL_FILE_PATH = os.path.join(VPS_DATA_DIR, "colab_ngrok_url.txt")
+COLAB_API_KEY_FOR_TRADE_ENGINE = parameter.COLAB_API_KEY_FOR_TRADE_ENGINE
+COLAB_URL_FILE_PATH = parameter.COLAB_URL_FILE_PATH
 
 import re
 

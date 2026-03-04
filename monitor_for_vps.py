@@ -40,22 +40,22 @@ def convert_numpy_floats(obj):
         return obj
 
 
-current_script_dir = "/content/drive/MyDrive/books/VARX_REGRESION"
+import parameter
+
+current_script_dir = parameter.ROOT_DIR
 if current_script_dir not in sys.path:
     sys.path.insert(0, current_script_dir)
 import vps_colab_connector
 
-VPS_PARAM_DIR = current_script_dir
-VPS_DATA_DIR = current_script_dir
+VPS_PARAM_DIR = parameter.VPS_PARAM_DIR
+VPS_DATA_DIR = parameter.VPS_DATA_DIR
 
 if VPS_PARAM_DIR not in sys.path:
     sys.path.insert(0, VPS_PARAM_DIR)
 
-import parameter
-
-MT5_LOGIN = Your_MT5_username
-MT5_PASSWORD = "YOUR_MT5_PASSWORD"
-MT5_SERVER = "YOUR_MT5_SERVER"
+MT5_LOGIN = parameter.MT5_LOGIN
+MT5_PASSWORD = parameter.MT5_PASSWORD
+MT5_SERVER = parameter.MT5_SERVER
 
 preprocessing_path = os.path.join(current_script_dir, 'preprocesing')
 if preprocessing_path not in sys.path:
@@ -67,14 +67,78 @@ from preprocesing.stationarity_test import test_and_stationarize_data as _test_a
 
 warnings.filterwarnings("ignore")
 
-COLAB_API_KEY_FOR_MONITOR = "YOUR_API_KEY"
-COLAB_URL_FILE_PATH = os.path.join(VPS_DATA_DIR, "colab_ngrok_url.txt")
+COLAB_API_KEY_FOR_MONITOR = parameter.COLAB_API_KEY_FOR_MONITOR
+COLAB_URL_FILE_PATH = parameter.COLAB_URL_FILE_PATH
 
-TRADE_ENGINE_API_URL = "http://127.0.0.1:8081/receive_signal"
+TRADE_ENGINE_API_URL = parameter.TRADE_ENGINE_API_URL
 
 # Runtime cache untuk stabilisasi metrik antar-siklus
 PAIR_REALIZED_STD_CACHE = {}
 KALMAN_STATE_CACHE = {}
+KALMAN_MODEL_PARAMS = {}
+
+
+def _extract_ensemble_payload(loaded_payload: dict) -> dict:
+    """Normalisasi payload model yang dimuat dari pickle.
+
+    Mendukung beberapa format:
+    - {"data": {...}} (legacy)
+    - {"ensemble": {...}, "dcc_garch": {...}} (fitted_ensemble.pkl)
+    - mapping grup langsung (legacy flat)
+    """
+    if not isinstance(loaded_payload, dict):
+        return {}
+
+    if "data" in loaded_payload and isinstance(loaded_payload["data"], dict):
+        data_payload = loaded_payload["data"]
+        if "ensemble" in data_payload or "dcc_garch" in data_payload:
+            return data_payload
+        return {"ensemble": {"H1": data_payload}}
+
+    if "ensemble" in loaded_payload or "dcc_garch" in loaded_payload:
+        return loaded_payload
+
+    return {"ensemble": {"H1": loaded_payload}}
+
+
+def _resolve_timeframe_seconds(tf_name: str) -> Optional[int]:
+    mapping = {
+        "M1": 60,
+        "M5": 300,
+        "M15": 900,
+        "H1": 3600,
+        "H4": 14400,
+        "D1": 86400,
+    }
+    return mapping.get(str(tf_name).upper())
+
+
+def _timeframe_close_marker(tf_name: str, current_ts):
+    if current_ts is None:
+        return None
+    ts = pd.Timestamp(current_ts)
+    tf = str(tf_name).upper()
+    if tf == "D1":
+        return ts.floor("D")
+    sec = _resolve_timeframe_seconds(tf)
+    if sec is None:
+        return ts
+    return pd.Timestamp(int(ts.timestamp() // sec * sec), unit="s", tz=ts.tz)
+
+
+def _is_new_timeframe_close(tf_name: str, current_ts, last_seen_map: Dict[str, Any]) -> bool:
+    """True jika candle timeframe tf_name sudah close baru dibanding siklus sebelumnya."""
+    marker = _timeframe_close_marker(tf_name, current_ts)
+    if marker is None:
+        return False
+    previous_ts = last_seen_map.get(tf_name)
+    if previous_ts is None:
+        last_seen_map[tf_name] = marker
+        return True
+    if marker > previous_ts:
+        last_seen_map[tf_name] = marker
+        return True
+    return False
 
 def format_for_dashboard(rls_forecasts, latest_prices):
     """
@@ -696,14 +760,16 @@ def detect_price_deviation(log_stream, latest_actual_prices: dict, restored_pric
 def _run_kalman_filter_step(pair_name: str, observed_price: float):
     state_data = KALMAN_STATE_CACHE.get(pair_name)
 
-    F = np.array(getattr(parameter, "KALMAN_F", [[1, 1], [0, 1]]), dtype=float)
-    H = np.array(getattr(parameter, "KALMAN_H", [[1, 0]]), dtype=float)
-    Q = np.array(getattr(parameter, "KALMAN_Q", [[1e-4, 0], [0, 1e-4]]), dtype=float)
-    R = np.array(getattr(parameter, "KALMAN_R", [[1e-6]]), dtype=float)
+    model_cfg = KALMAN_MODEL_PARAMS.get("M1", {})
+    F = np.array(model_cfg.get("F", getattr(parameter, "KALMAN_F", [[1, 1], [0, 1]])), dtype=float)
+    H = np.array(model_cfg.get("H", getattr(parameter, "KALMAN_H", [[1, 0]])), dtype=float)
+    Q = np.array(model_cfg.get("Q", getattr(parameter, "KALMAN_Q", [[1e-4, 0], [0, 1e-4]])), dtype=float)
+    R = np.array(model_cfg.get("R", getattr(parameter, "KALMAN_R", [[1e-6]])), dtype=float)
 
     if state_data is None:
-        x = np.array(getattr(parameter, "KALMAN_INITIAL_STATE", [observed_price, 0.0]), dtype=float).reshape(-1, 1)
-        P = np.array(getattr(parameter, "KALMAN_INITIAL_P", [[0.1, 0], [0, 0.1]]), dtype=float)
+        default_state = [observed_price, 0.0]
+        x = np.array(model_cfg.get("initial_state", getattr(parameter, "KALMAN_INITIAL_STATE", default_state)), dtype=float).reshape(-1, 1)
+        P = np.array(model_cfg.get("initial_P", getattr(parameter, "KALMAN_INITIAL_P", [[0.1, 0], [0, 0.1]])), dtype=float)
         state_data = {"x": x, "P": P, "innovation_history": []}
 
     x_prior = F @ state_data["x"]
@@ -770,7 +836,7 @@ def send_monitoring_data_to_colab(data: dict, log_stream):
 
 def send_signal_to_trade_engine(signal_data: dict, log_stream) -> bool:
     try:
-        TE_API_KEY = "bima_12345678"
+        TE_API_KEY = parameter.TRADE_ENGINE_API_KEY
         headers = {
             "Content-Type": "application/json",
             "X-API-Key": TE_API_KEY
@@ -907,71 +973,119 @@ def start_realtime_monitoring(
     except Exception as e:
         log_stream_main.write(f"[ERROR] Failed to load final_stationarized_fred_data from {fred_path}: {e}\n")
     log_stream_main.flush()
-
+    model_payload = {}
     try:
         models_path = os.path.join(VPS_DATA_DIR, os.path.basename(parameter.FITTED_MODELS_PATH))
         with open(models_path, 'rb') as f:
             loaded_data = pickle.load(f)
-            fitted_varx_models = loaded_data.get("data", {})
-        log_stream_main.write(f"[OK] Successfully loaded fitted_varx_models from {models_path}\n")
+            model_payload = _extract_ensemble_payload(loaded_data)
+        log_stream_main.write(f"[OK] Successfully loaded model payload from {models_path}\n")
     except FileNotFoundError:
-        log_stream_main.write(f"[WARN] Fitted models file not found at {models_path}. RLS initialization might be incomplete.\n")
+        log_stream_main.write(f"[WARN] Fitted models file not found at {models_path}. Parameter update might be incomplete.\n")
     except Exception as e:
-        log_stream_main.write(f"[ERROR] Failed to load fitted_varx_models from {models_path}: {e}\n")
+        log_stream_main.write(f"[ERROR] Failed to load fitted models from {models_path}: {e}\n")
     log_stream_main.flush()
 
+    ensemble_models = model_payload.get("ensemble", {}) if isinstance(model_payload, dict) else {}
+    dcc_model_registry = model_payload.get("dcc_garch", {}) if isinstance(model_payload, dict) else {}
+
+    if not ensemble_models and isinstance(model_payload, dict):
+        candidate_flat = {
+            k: v for k, v in model_payload.items()
+            if isinstance(v, dict) and "fitted_model" in v and "endog_names" in v
+        }
+        if candidate_flat:
+            ensemble_models = {"H1": candidate_flat}
+
+    for tf_name, tf_models in ensemble_models.items():
+        if isinstance(tf_models, dict) and str(tf_models.get("model_type", "")).upper().startswith("KALMAN"):
+            KALMAN_MODEL_PARAMS[str(tf_name).upper()] = tf_models
+
+    fitted_varx_models = ensemble_models.get("H1", {}) if isinstance(ensemble_models, dict) else {}
+
     rls_estimators: Dict[str, Dict[str, Any]] = {}
-    if fitted_varx_models:
-        log_stream_main.write(f"[INFO] Initializing RLS estimators for each VARX model group.\n")
+    timeframe_last_close_map: Dict[str, Any] = {}
+    dcc_metrics_cache: Dict[str, Dict[str, float]] = {}
+    dcc_timeframe_last_close_map: Dict[str, Any] = {}
+
+    if ensemble_models:
+        log_stream_main.write(f"[INFO] Initializing adaptive estimators from ensemble payload.\n")
         log_stream_main.flush()
-        for group_name, model_res in fitted_varx_models.items():
-            fitted_model_obj = model_res['fitted_model']
-            endog_names_group = model_res['endog_names']
-            exog_names_group = model_res.get('exog_names', [])
 
-            n_endog_group = len(endog_names_group)
+        for tf_name, tf_models in ensemble_models.items():
+            if not isinstance(tf_models, dict):
+                continue
 
-            if isinstance(fitted_model_obj, (VARMAXResultsWrapper, SARIMAXResultsWrapper)):
-                try:
-                    k_regressors = 1 + (parameter.maxlag_test * n_endog_group) + len(exog_names_group)
-                    baseline_theta_ref = _extract_baseline_varx_params(log_stream_main, fitted_model_obj, n_endog_group, k_regressors, endog_names_group, exog_names_group, parameter.maxlag_test)
+            for group_name, model_res in tf_models.items():
+                if not isinstance(model_res, dict):
+                    continue
 
-                    if baseline_theta_ref is None:
-                        log_stream_main.write(f"  [WARN] Failed to extract baseline parameters for group {group_name}. Skipping RLS init.\n")
-                        log_stream_main.flush()
-                        continue
+                model_type = str(model_res.get("model_type", "")).upper()
+                fitted_model_obj = model_res.get('fitted_model')
+                endog_names_group = model_res.get('endog_names', [])
+                exog_names_group = model_res.get('exog_names', [])
+                lags_used = int(model_res.get('lags_used', parameter.maxlag_test))
 
-                    initial_theta = baseline_theta_ref
-                    initial_P = parameter.RLS_INITIAL_P_DIAG * np.eye(k_regressors)
+                estimator_key = f"{str(tf_name).upper()}::{group_name}"
 
-                    rls_estimators[group_name] = {
-                        'theta': initial_theta,
-                        'P': initial_P,
-                        'baseline_theta_ref': baseline_theta_ref,
-                        'n_endog': n_endog_group,
-                        'k_regressors': k_regressors,
-                        'endog_names': endog_names_group,
-                        'exog_names': exog_names_group,
-                        'maxlags': parameter.maxlag_test,
-                        'rls_update_count': 0,
-                        'pred_variance_history': [],
-                        'last_update_bar_timestamp': None,
-                        'last_Y_t': None
-                    }
-                    log_stream_main.write(f"  [OK] RLS initialized for group {group_name}. Theta shape: {initial_theta.shape}, P shape: {initial_P.shape}\n")
-                    log_stream_main.flush()
+                if model_type.startswith("KALMAN"):
+                    KALMAN_MODEL_PARAMS[str(tf_name).upper()] = model_res
+                    log_stream_main.write(f"  [OK] Kalman params registered for timeframe {tf_name}.\n")
+                    continue
 
-                except Exception as e:
-                    log_stream_main.write(f"  [ERROR] Failed to initialize RLS for group {group_name}: {e}\n")
-                    log_stream_main.flush()
-            else:
-                log_stream_main.write(f"  [WARN] Model type for {group_name} not recognized for RLS initialization.\n")
+                if isinstance(fitted_model_obj, (VARMAXResultsWrapper, SARIMAXResultsWrapper)):
+                    try:
+                        n_endog_group = len(endog_names_group)
+                        k_regressors = 1 + (lags_used * n_endog_group) + len(exog_names_group)
+                        baseline_theta_ref = _extract_baseline_varx_params(
+                            log_stream_main,
+                            fitted_model_obj,
+                            n_endog_group,
+                            k_regressors,
+                            endog_names_group,
+                            exog_names_group,
+                            lags_used
+                        )
+
+                        if baseline_theta_ref is None:
+                            log_stream_main.write(f"  [WARN] Failed to extract baseline parameters for {estimator_key}. Skipping RLS init.\n")
+                            continue
+
+                        initial_theta = baseline_theta_ref
+                        initial_P = parameter.RLS_INITIAL_P_DIAG * np.eye(k_regressors)
+
+                        rls_estimators[estimator_key] = {
+                            'theta': initial_theta,
+                            'P': initial_P,
+                            'baseline_theta_ref': baseline_theta_ref,
+                            'n_endog': n_endog_group,
+                            'k_regressors': k_regressors,
+                            'endog_names': endog_names_group,
+                            'exog_names': exog_names_group,
+                            'maxlags': lags_used,
+                            'rls_update_count': 0,
+                            'pred_variance_history': [],
+                            'last_update_bar_timestamp': None,
+                            'last_Y_t': None,
+                            'timeframe': str(tf_name).upper(),
+                            'group_name': group_name,
+                            'model_type': model_type
+                        }
+                        log_stream_main.write(
+                            f"  [OK] RLS initialized for {estimator_key}. "
+                            f"Theta shape: {initial_theta.shape}, P shape: {initial_P.shape}\n"
+                        )
+
+                    except Exception as e:
+                        log_stream_main.write(f"  [ERROR] Failed to initialize RLS for {estimator_key}: {e}\n")
+                else:
+                    log_stream_main.write(f"  [WARN] Unsupported model type for {estimator_key}: {model_type}.\n")
                 log_stream_main.flush()
     else:
-        log_stream_main.write(f"[WARN] No fitted VARX models provided for RLS initialization.\n")
+        log_stream_main.write(f"[WARN] No ensemble models provided for estimator initialization.\n")
         log_stream_main.flush()
 
-    if not restored_price_forecasts_with_intervals or not fitted_varx_models:
+    if not restored_price_forecasts_with_intervals or not ensemble_models:
         log_stream_main.write("[ERROR] Critical data or models missing. Cannot proceed with monitoring. Please ensure files are transferred correctly.\n")
         log_stream_main.flush()
         if log_output_path: log_stream_main.close()
@@ -1061,7 +1175,7 @@ def start_realtime_monitoring(
                 if pd.notnull(close_std) and close_std > 0:
                     PAIR_REALIZED_STD_CACHE[pair_name] = float(close_std)
 
-            for group_name, estimator_data in rls_estimators.items():
+            for estimator_key, estimator_data in rls_estimators.items():
                 current_theta = estimator_data['theta']
                 current_P = estimator_data['P']
                 baseline_theta_ref = estimator_data['baseline_theta_ref']
@@ -1070,21 +1184,39 @@ def start_realtime_monitoring(
                 endog_names_group = estimator_data['endog_names']
                 exog_names_group = estimator_data['exog_names']
                 maxlags = estimator_data['maxlags']
+                timeframe_name = estimator_data.get('timeframe', 'H1')
+                group_name = estimator_data.get('group_name', estimator_key)
+                estimator_label = f"{timeframe_name}::{group_name}"
 
                 try:
-                    group_returns_for_corr = hf_combined_log_returns_df[endog_names_group].tail(volatility_window)
-                    corr_matrix = group_returns_for_corr.corr().values
-                    if corr_matrix.shape[0] > 1:
+                    dcc_model = dcc_model_registry.get(timeframe_name)
+                    if dcc_model is not None and _is_new_timeframe_close(timeframe_name, hf_combined_log_returns_df.index[-1], dcc_timeframe_last_close_map):
+                        H_next = dcc_model.forecast(horizon=1)
+                        std = np.sqrt(np.diag(H_next))
+                        denom = np.outer(std, std)
+                        corr_matrix = np.divide(H_next, denom, out=np.zeros_like(H_next), where=denom > 0)
                         upper = np.triu(np.abs(corr_matrix), k=1)
                         non_zero = upper[upper > 0]
                         contagion_score = float(np.mean(non_zero)) if non_zero.size else 0.0
-                    else:
-                        contagion_score = 0.0
+                        dcc_metrics_cache[timeframe_name] = {"contagion_score": float(np.clip(contagion_score, 0.0, 1.0))}
+                    contagion_score = dcc_metrics_cache.get(timeframe_name, {}).get("contagion_score", 0.0)
                 except Exception:
-                    contagion_score = 0.0
-                dcc_group_metrics[group_name] = {
+                    try:
+                        group_returns_for_corr = hf_combined_log_returns_df[endog_names_group].tail(volatility_window)
+                        corr_matrix = group_returns_for_corr.corr().values
+                        if corr_matrix.shape[0] > 1:
+                            upper = np.triu(np.abs(corr_matrix), k=1)
+                            non_zero = upper[upper > 0]
+                            contagion_score = float(np.mean(non_zero)) if non_zero.size else 0.0
+                        else:
+                            contagion_score = 0.0
+                    except Exception:
+                        contagion_score = 0.0
+                dcc_group_metrics[estimator_label] = {
                     "contagion_score": float(np.clip(contagion_score, 0.0, 1.0))
                 }
+                if timeframe_name == "H1":
+                    dcc_group_metrics[group_name] = dcc_group_metrics[estimator_label]
 
                 latest_hf_combined_log_returns_df_row = hf_combined_log_returns_df.iloc[[-1]]
                 latest_hf_fred_exog_df_row = hf_fred_exog_aligned.iloc[[-1]] if not hf_fred_exog_aligned.empty else pd.DataFrame()
@@ -1106,7 +1238,7 @@ def start_realtime_monitoring(
                 Y_t = latest_hf_combined_log_returns_df_row[endog_names_group].values
 
                 if Y_t.shape[0] == 0:
-                    log_stream.write(f"    [WARN] No current endogenous data (Y_t) for RLS update for group {group_name}. Skipping RLS update.\n")
+                    log_stream.write(f"    [WARN] No current endogenous data (Y_t) for RLS update for {estimator_label}. Skipping RLS update.\n")
                     log_stream.flush()
                     continue
 
@@ -1127,15 +1259,20 @@ def start_realtime_monitoring(
                 innovation_norm = float("inf") if last_Y_t is None else float(np.linalg.norm(Y_t - last_Y_t))
 
                 should_update_rls = True
-                if last_update_bar_timestamp is not None and current_bar_timestamp <= last_update_bar_timestamp:
+                if not _is_new_timeframe_close(timeframe_name, current_bar_timestamp, timeframe_last_close_map):
                     should_update_rls = False
                     log_stream.write(
-                        f"    [INFO] {group_name}: RLS update skipped (no new candle).\n"
+                        f"    [INFO] {estimator_label}: parameter update skipped (timeframe candle not closed).\n"
+                    )
+                elif last_update_bar_timestamp is not None and current_bar_timestamp <= last_update_bar_timestamp:
+                    should_update_rls = False
+                    log_stream.write(
+                        f"    [INFO] {estimator_label}: RLS update skipped (no new candle).\n"
                     )
                 elif innovation_norm < innovation_threshold:
                     should_update_rls = False
                     log_stream.write(
-                        f"    [INFO] {group_name}: RLS update skipped (innovation {innovation_norm:.6e} < threshold {innovation_threshold:.6e}).\n"
+                        f"    [INFO] {estimator_label}: RLS update skipped (innovation {innovation_norm:.6e} < threshold {innovation_threshold:.6e}).\n"
                     )
 
                 if should_update_rls:
@@ -1187,7 +1324,7 @@ def start_realtime_monitoring(
                         )
                     )
 
-                rls_metrics[group_name] = {
+                rls_metrics[estimator_label] = {
                     "confidence": float(confidence),
                     "maturity": float(maturity),
                     "deviation": float(deviation_norm),
@@ -1202,11 +1339,14 @@ def start_realtime_monitoring(
                         "zscore": mean_reversion_z,
                         "pred_var": float(pred_variance)
                     }
-                confidence_per_group[group_name] = confidence
-                parameter_deviations[group_name] = float(deviation_norm)
+                confidence_per_group[estimator_label] = confidence
+                parameter_deviations[estimator_label] = float(deviation_norm)
+                if timeframe_name == "H1":
+                    confidence_per_group[group_name] = confidence
+                    parameter_deviations[group_name] = float(deviation_norm)
 
                 log_stream.write(
-                    f"    [INFO] {group_name} | "
+                    f"    [INFO] {estimator_label} | "
                     f"Deviation: {deviation_norm:.4f} | "
                     f"Confidence: {confidence:.3f} | "
                     f"Maturity: {maturity:.2f} | "
