@@ -40,22 +40,22 @@ def convert_numpy_floats(obj):
         return obj
 
 
-current_script_dir = "/content/drive/MyDrive/books/VARX_REGRESION"
+import parameter
+
+current_script_dir = parameter.ROOT_DIR
 if current_script_dir not in sys.path:
     sys.path.insert(0, current_script_dir)
 import vps_colab_connector
 
-VPS_PARAM_DIR = current_script_dir
-VPS_DATA_DIR = current_script_dir
+VPS_PARAM_DIR = parameter.VPS_PARAM_DIR
+VPS_DATA_DIR = parameter.VPS_DATA_DIR
 
 if VPS_PARAM_DIR not in sys.path:
     sys.path.insert(0, VPS_PARAM_DIR)
 
-import parameter
-
-MT5_LOGIN = Your_MT5_username
-MT5_PASSWORD = "YOUR_MT5_PASSWORD"
-MT5_SERVER = "YOUR_MT5_SERVER"
+MT5_LOGIN = parameter.MT5_LOGIN
+MT5_PASSWORD = parameter.MT5_PASSWORD
+MT5_SERVER = parameter.MT5_SERVER
 
 preprocessing_path = os.path.join(current_script_dir, 'preprocesing')
 if preprocessing_path not in sys.path:
@@ -67,10 +67,10 @@ from preprocesing.stationarity_test import test_and_stationarize_data as _test_a
 
 warnings.filterwarnings("ignore")
 
-COLAB_API_KEY_FOR_MONITOR = "YOUR_API_KEY"
-COLAB_URL_FILE_PATH = os.path.join(VPS_DATA_DIR, "colab_ngrok_url.txt")
+COLAB_API_KEY_FOR_MONITOR = parameter.COLAB_API_KEY_FOR_MONITOR
+COLAB_URL_FILE_PATH = parameter.COLAB_URL_FILE_PATH
 
-TRADE_ENGINE_API_URL = "http://127.0.0.1:8081/receive_signal"
+TRADE_ENGINE_API_URL = parameter.TRADE_ENGINE_API_URL
 
 # Runtime cache untuk stabilisasi metrik antar-siklus
 PAIR_REALIZED_STD_CACHE = {}
@@ -836,7 +836,7 @@ def send_monitoring_data_to_colab(data: dict, log_stream):
 
 def send_signal_to_trade_engine(signal_data: dict, log_stream) -> bool:
     try:
-        TE_API_KEY = "bima_12345678"
+        TE_API_KEY = parameter.TRADE_ENGINE_API_KEY
         headers = {
             "Content-Type": "application/json",
             "X-API-Key": TE_API_KEY
