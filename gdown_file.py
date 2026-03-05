@@ -3,7 +3,7 @@ import subprocess
 import sys
 
 # ===== KONFIGURASI =====
-TARGET_DIR = "/home/bimachasin86/VARX_REGRESION/fitted_models/"
+TARGET_DIR = "/home/bimachasin86/VARX_REGRESION/vps_sync/"
 
 FILES = {
     "1-iuJ3mOwzfANmqau_57zWNSoLOhjDdL5": "fitted_models.pkl",

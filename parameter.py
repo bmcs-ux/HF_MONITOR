@@ -120,8 +120,8 @@ SNR_THRESHOLD = 0.1
 TP_RR_RATIO = 1.0
 # Storage Paths
 FORECAST_OUTPUT_PATH = os.path.join(ROOT_DIR, 'vps_sync', 'restored_forecasts.pkl')
-FRED_DATA_PATH = os.path.join(ROOT_DIR, ' vps_sync', 'final_fred_data.pkl')
-FITTED_MODELS_PATH = os.path.join(ROOT_DIR, ' vps_sync', 'fitted_models.pkl') # Path for fitted ensemble models
+FRED_DATA_PATH = os.path.join(ROOT_DIR, 'vps_sync', 'final_fred_data.pkl')
+FITTED_MODELS_PATH = os.path.join(ROOT_DIR, 'vps_sync', 'fitted_models.pkl') # Path for fitted ensemble models
 
 
 # Adaptive safeguards for mixed-timeframe RLS monitoring
