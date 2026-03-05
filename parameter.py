@@ -24,15 +24,17 @@ TRADE_ENGINE_API_URL = os.getenv("TRADE_ENGINE_API_URL", "http://127.0.0.1:8081/
 
 
 PAIRS = {
-    "USD/CAD": "USDCADm",
-    "USD/DXY": "DXYm",
-    "XAU/USD": "XAUUSDm",
-    "XAG/USD": "XAGUSDm",
-    "XCU/USD": "XCUUSDm",
-    "USD/JPY": "USDJPYm",
-    "EUR/USD": "EURUSDm",
-    "US500": "US500m"
-#    "US30": "US30m"
+    'GBPUSD': 'GBPUSDm',
+    'AUDUSD': 'AUDUSDm',
+    'USDCAD': 'USDCADm',
+    'USDCHF': 'USDCHFm',
+    'USDJPY': 'USDJPYm',
+    'NZDUSD': 'NZDUSDm',
+    'XAUUSD': 'XAUUSDm',   # Gold
+    'XAGUSD': 'XAGUSDm',   # Silver
+    #'USOIL': 'USOILm',     # Crude Oil
+    'US500': 'US500m',
+    'DXY': 'DXYm',
 }
 
 
@@ -48,24 +50,13 @@ TF_MAP = {
     "H1": "60min",
     "H4": "240min"   # will be created by resampling the base data
 }
+
 VARX_ENDOG_GROUPS = {
-    'METALS_CLOSE': [
-        'XAU/USD_Close_Log_Return',
-        'XAG/USD_Close_Log_Return',
-        'XCU/USD_Close_Log_Return',
-#        'XPB/USD_Close_Log_Return'
-    ],
-    'CURRENCIES_OHLC': [
-        'USD/CAD_Close_Log_Return',
-        'USD/DXY_Close_Log_Return',
-        'EUR/USD_Close_Log_Return', # Added EUR/USD Close Log Return
-        'USD/JPY_Close_Log_Return'
-    ]
-#    'index_OHLC': [
-#        'US500_Close_Log_Return',
-#        'US30_Close_Log_Return'
-#    ]
+    'FX_Majors': ['GBPUSD_Close_Log_Return', 'AUDUSD_Close_Log_Return', 'USDJPY_Close_Log_Return'],
+    'Commodities': ['XAUUSD_Close_Log_Return', 'XAGUSD_Close_Log_Return'],
+    'Risk': ['US500_Close_Log_Return', 'DXY_Close_Log_Return'],
 }
+
 BLOK_SIGNAL_FOR = {"US500", "US30","USD/DXY", "USD/CAD","EUR/USD","XCU/USD","XPB/USD"}  # Masukkan nama pair yang ingin diblokir
 # Note: yfinance intervals use strings like '1m','5m','15m','60m'. We will resample using pandas offsets.
 
@@ -112,7 +103,7 @@ RLS_TP_RR_MIN = 0.9 # Minimum acceptable tp_rr_ratio
 RLS_SL_MAX_MULTIPLIER = 2.2 # Maximum allowed multiplier for k_atr_stop and k_model_stop
 
 # Core maturity gate
-RLS_MIN_UPDATES_FOR_CONFIDENCE = 60
+RLS_MIN_UPDATES_FOR_CONFIDENCE = 1
 # Confidence decay sensitivity
 RLS_CONFIDENCE_ALPHA = 0.4
 # Entry gate
@@ -128,9 +119,9 @@ K_MODEL_STOP = 1.0
 SNR_THRESHOLD = 0.1
 TP_RR_RATIO = 1.0
 # Storage Paths
-FORECAST_OUTPUT_PATH = os.path.join(ROOT_DIR, 'restored_forecasts.pkl')
-FRED_DATA_PATH = os.path.join(ROOT_DIR, 'final_fred_data.pkl')
-FITTED_MODELS_PATH = os.path.join(ROOT_DIR, 'fitted_ensemble.pkl') # Path for fitted ensemble models
+FORECAST_OUTPUT_PATH = os.path.join(ROOT_DIR, 'vps_sync', 'restored_forecasts.pkl')
+FRED_DATA_PATH = os.path.join(ROOT_DIR, ' vps_sync', 'final_fred_data.pkl')
+FITTED_MODELS_PATH = os.path.join(ROOT_DIR, ' vps_sync', 'fitted_models.pkl') # Path for fitted ensemble models
 
 
 # Adaptive safeguards for mixed-timeframe RLS monitoring
