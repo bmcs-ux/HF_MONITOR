@@ -12,7 +12,7 @@ def display_kassandra_opening():
     Advanced cinematic startup for KASSANDRA Cognitive Trading System
     """
 
-    project_name = "CASSANDRA"
+    project_name = "KASSANDRA"
     subtitle = "Automated Market Analysis and Risk Management System"
     owner_nick = "BIMACHASIN86"
 
@@ -127,6 +127,16 @@ def display_kassandra_opening():
 display_kassandra_opening()
 
 
+def wait_until_next_m1_open():
+    """Menunggu hingga candle M1 berikutnya open agar siklus monitoring sinkron."""
+    now = datetime.now()
+    seconds_to_wait = 60 - now.second - (now.microsecond / 1_000_000)
+    if seconds_to_wait <= 0:
+        seconds_to_wait = 60
+    print(f"[RUN.PY] Waiting {seconds_to_wait:.2f}s for next M1 open...")
+    time.sleep(seconds_to_wait)
+
+
 # --- Configuration for VPS --- 
 # Set ROOT_DIR_VPS to the absolute path where your project is cloned on the VPS
 import parameter
@@ -216,6 +226,7 @@ if trade_engine_started:
     VPS_INTERVAL_SECONDS = 60 * 1            # Example: check every 1 minute
     VPS_CONFIDENCE_LEVEL = 0.95
 
+    wait_until_next_m1_open()
     monitoring_results, full_log = monitor_for_vps.start_realtime_monitoring(
         total_duration_minutes=VPS_TOTAL_DURATION_MINUTES,
         interval_seconds=VPS_INTERVAL_SECONDS,
