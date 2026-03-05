@@ -951,7 +951,7 @@ def start_realtime_monitoring(
     log_stream_main.flush()
 
     try:
-        forecast_path = os.path.join(VPS_DATA_DIR, os.path.basename(parameter.FORECAST_OUTPUT_PATH))
+        forecast_path = parameter.FORECAST_OUTPUT_PATH
         with open(forecast_path, 'rb') as f:
             loaded_data = pickle.load(f)
             restored_price_forecasts_with_intervals = loaded_data.get("data", {})
@@ -963,7 +963,7 @@ def start_realtime_monitoring(
     log_stream_main.flush()
 
     try:
-        fred_path = os.path.join(VPS_DATA_DIR, os.path.basename(parameter.FRED_DATA_PATH))
+        fred_path = parameter.FRED_DATA_PATH
         with open(fred_path, 'rb') as f:
             loaded_data = pickle.load(f)
             final_stationarized_fred_data = loaded_data.get("data", {})
@@ -975,7 +975,7 @@ def start_realtime_monitoring(
     log_stream_main.flush()
     model_payload = {}
     try:
-        models_path = os.path.join(VPS_DATA_DIR, os.path.basename(parameter.FITTED_MODELS_PATH))
+        models_path = parameter.FITTED_MODELS_PATH
         with open(models_path, 'rb') as f:
             loaded_data = pickle.load(f)
             model_payload = _extract_ensemble_payload(loaded_data)
