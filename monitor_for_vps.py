@@ -1364,7 +1364,7 @@ def start_realtime_monitoring(
             log_stream.flush()
 
             if global_rls_confidence < parameter.RLS_CONFIDENCE_ENTRY_THRESHOLD:
-                skip_individual_trade_decisions = True
+                skip_individual_trade_decisions = parameter._RLS_CONFIDENCE
                 log_stream.write(
                     f"    [WARN] Global RLS Confidence ({global_rls_confidence:.4f}) "
                     f"is below Entry Threshold ({parameter.RLS_CONFIDENCE_ENTRY_THRESHOLD:.4f}). "
@@ -1378,14 +1378,14 @@ def start_realtime_monitoring(
             if rls_param_deviation_score > parameter.RLS_DEVIATION_CLOSE_ALL_THRESHOLD:
                 log_stream.write(f"\n    [ALERT] RLS parameter deviation ({rls_param_deviation_score:.4f}) exceeds GLOBAL CLOSE ALL threshold ({parameter.RLS_DEVIATION_CLOSE_ALL_THRESHOLD:.4f}). Sending signal to close all open positions.\n")
                 send_signal_to_trade_engine({"signal_id": f"CLOSE_ALL_RISK_{pipeline_run_id_for_monitor}_{cycle_count}", "action": "CLOSE_ALL"}, log_stream)
-                skip_individual_trade_decisions = True
+                skip_individual_trade_decisions = parameter._RLS_DEVIATION_TRESHOLD
                 log_stream.flush()
             else:
                 log_stream.write(f"    [INFO] Global RLS deviation ({rls_param_deviation_score:.4f}) is below CLOSE ALL threshold.\n")
                 log_stream.flush()
 
             if news_manager_instance.is_currently_restricted():
-                skip_individual_trade_decisions = True
+                skip_individual_trade_decisions = parameter.NEWS
                 log_stream.write(f"    [WARN] News restriction detected. Setting skip_individual_trade_decisions to True.\n")
                 log_stream.flush()
 
@@ -1420,7 +1420,7 @@ def start_realtime_monitoring(
                     )
 
                     if rls_expected_return is None:
-                        trade_signals[pair_name] = HOLD_REASON("RLS unavailable")
+                        trade_signals[pair_name] = {"signal": "HOLD", "reason": "RLS unavailable"}
                         continue
 
                     predicted_mean = latest_hf_actual_prices[pair_name] * np.exp(rls_expected_return)

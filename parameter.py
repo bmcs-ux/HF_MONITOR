@@ -1,5 +1,3 @@
-#
-# cell_id: JGemPprTvBcw
 # --------------------------------
 # PARAMETERS (ubah sesuai kebutuhan)
 # --------------------------------
@@ -88,10 +86,14 @@ FRED_API_KEY = "YOUR_FRED_API_KEY" #if you don't have fred api key, go to fred w
 
 forecast_horizon = 2
 
+NEWS = True #News gate
+
 # RLS parameters for high-frequency monitoring
 FORGETTING_FACTOR = 0.999 # Typically between 0.9 and 1.0. Lower for faster adaptation.
 RLS_INITIAL_P_DIAG = 1e2 # Large initial value for P (covariance matrix inverse)
 RLS_INITIAL_THETA = 0.0 # Initial guess for parameters (usually 0 or small random)
+
+_RLS_DEVIATION_THRESHOLD = True #Deviation gate
 RLS_DEVIATION_THRESHOLD = 6.90 # NEW: Threshold for RLS parameter deviation.
 RLS_DEVIATION_CLOSE_ALL_THRESHOLD = 7.1 # NEW: Threshold to trigger closing all positions
 
@@ -99,11 +101,13 @@ RLS_DEVIATION_CLOSE_ALL_THRESHOLD = 7.1 # NEW: Threshold to trigger closing all 
 RLS_SCALING_FACTOR_SL = 0.15 # Scales the increase in k_atr_stop and k_model_stop
 RLS_SCALING_FACTOR_TP = 0.35 # Scales the reduction in tp_rr_ratio
 RLS_SNR_INCREASE_FACTOR = 0.05 # Scales the increase in snr_threshold
-RLS_TP_RR_MIN = 0.9 # Minimum acceptable tp_rr_ratio
+RLS_TP_RR_MIN = 0.3 # Minimum acceptable tp_rr_ratio
 RLS_SL_MAX_MULTIPLIER = 2.2 # Maximum allowed multiplier for k_atr_stop and k_model_stop
 
+
+_RLS_CONFIDENCE = False
 # Core maturity gate
-RLS_MIN_UPDATES_FOR_CONFIDENCE = 1
+RLS_MIN_UPDATES_FOR_CONFIDENCE = 40
 # Confidence decay sensitivity
 RLS_CONFIDENCE_ALPHA = 0.4
 # Entry gate
