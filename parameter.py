@@ -43,7 +43,7 @@ PAIRS = {
 
 # NEW: Data window & base interval to download for HIGH-FREQUENCY MONITORING
 HF_LOOKBACK_DAYS = 3         # e.g., last 6 days for high-frequency data
-HF_BASE_INTERVAL = "1m"     # e.g., 15-minute interval for high-frequency data
+HF_BASE_INTERVAL = "5m"     # e.g., 15-minute interval for high-frequency data
 
 # Timeframes we will analyse (mapping ke faktor resample)
 TF_MAP = {
@@ -123,13 +123,13 @@ MAGIC_NUMBER = 202401
 # Trade management
 EQUITY = 1000
 RISK_PER_TRADE_PCT = 0.1
-K_ATR_STOP = 0.6
-K_MODEL_STOP = 1.0
-SNR_THRESHOLD = 0.1
+K_ATR_STOP = 1.5
+K_MODEL_STOP = 1.2
+SNR_THRESHOLD = 0.6
 TP_RR_RATIO = 1.0
 
 # Adaptive safeguards for mixed-timeframe RLS monitoring
-RLS_VOLATILITY_WINDOW = 96
+RLS_VOLATILITY_WINDOW = 196
 RLS_MIN_INNOVATION_SCALE = 0.5
 RLS_DEVIATION_ADAPTIVE_STD_MULTIPLIER = 0.5
 
@@ -138,14 +138,14 @@ RLS_DEVIATION_ADAPTIVE_STD_MULTIPLIER = 0.5
 CONSENSUS_WEIGHT_D1 = 0.4
 CONSENSUS_WEIGHT_H1 = 0.5
 CONSENSUS_WEIGHT_M15 = 0.2
-CONSENSUS_THRESHOLD = 0.15
+CONSENSUS_THRESHOLD = 0.55
 
 # DCC proxy controls (contagion -> wider risk envelope)
 DCC_RISK_MULTIPLIER = 0.5
 DCC_FLIP_EPS_MULTIPLIER = 0.5
 
 # Mean reversion monitor gates
-MEAN_REVERSION_HIGH_Z = 2.5
+MEAN_REVERSION_HIGH_Z = 3.0
 MEAN_REVERSION_LOW_VOL_PREDVAR = 0.002
 
 # Kalman execution filter defaults (M1)
