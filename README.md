@@ -49,6 +49,11 @@ cd HF_MONITOR
 ```bash
 python3 -m venv venv
 source venv/bin/activate
+# Pastikan rpyc sudah terinstall
+pip install rpyc
+
+# Jalankan rpyc_classic server (default port 18812)
+rpyc_classic.py --mode=THREADED
 
 ```
 
@@ -74,6 +79,114 @@ Pastikan Anda telah mengisi API Key (FRED, dll) dan kredensial MT5 pada file `pa
 
 ---
 
+## Penjelasan Parameter `parameter.py` Berdasarkan Pemanggilan di `monitor_for_vps.py`
+
+Di bawah ini adalah parameter yang **benar-benar dipakai** oleh `monitor_for_vps.py` beserta fungsi dan efek jika nilainya diubah.
+
+### A) Runtime, path, dan konektivitas
+
+* `ROOT_DIR`, `VPS_PARAM_DIR`, `VPS_DATA_DIR`
+  * **Fungsi:** Menentukan root project dan folder referensi untuk import modul + pembacaan file sinkronisasi model/data.
+  * **Efek perubahan:** Jika path salah, monitor dapat gagal import modul internal atau gagal memuat data model sehingga siklus eksekusi berhenti lebih awal.
+* `FORECAST_OUTPUT_PATH`, `FRED_DATA_PATH`, `FITTED_MODELS_PATH`
+  * **Fungsi:** Lokasi file pickle untuk forecast, data eksogen FRED, dan model fit.
+  * **Efek perubahan:** Path tidak valid/berisi file lama dapat memicu prediksi dari data usang atau error saat load.
+* `MT5_LOGIN`, `MT5_PASSWORD`, `MT5_SERVER`
+  * **Fungsi:** Kredensial login MT5 via `MT5Adapter`.
+  * **Efek perubahan:** Kredensial salah mengakibatkan tidak ada koneksi broker, sehingga pengambilan posisi/equity/order gagal.
+* `COLAB_API_KEY_FOR_MONITOR`, `COLAB_URL_FILE_PATH`
+  * **Fungsi:** Otentikasi dan endpoint sinkronisasi dari Colab/ngrok.
+  * **Efek perubahan:** API key salah atau URL file tidak sinkron akan memutus alur update data/model dari sumber eksternal.
+* `TRADE_ENGINE_API_URL`, `TRADE_ENGINE_API_KEY`
+  * **Fungsi:** Endpoint + kunci autentikasi saat monitor mengirim sinyal ke trade engine.
+  * **Efek perubahan:** URL salah membuat sinyal tidak pernah sampai; key salah membuat request ditolak.
+
+### B) Data market, horizon, dan struktur model
+
+* `PAIRS`
+  * **Fungsi:** Mapping pair internal ke simbol broker (mis. `GBPUSD -> GBPUSDm`).
+  * **Efek perubahan:** Simbol yang tidak tersedia di broker membuat data/tick/order pair tersebut gagal diproses.
+* `HF_LOOKBACK_DAYS`, `HF_BASE_INTERVAL`
+  * **Fungsi:** Menentukan jendela data historis dan granularitas data HF yang diunduh untuk pembentukan fitur log return.
+  * **Efek perubahan:** Terlalu kecil => sinyal/statistik kurang stabil; terlalu besar => beban komputasi dan latensi meningkat.
+* `VARX_ENDOG_GROUPS`
+  * **Fungsi:** Definisi grouping variabel endogen untuk inferensi dan update RLS per grup.
+  * **Efek perubahan:** Group yang tidak sinkron dengan model fit akan menyebabkan missing kolom/parameter sehingga forecast memburuk atau gagal.
+* `maxlag_test`, `alpha`
+  * **Fungsi:** Parameter uji Granger dan fallback jumlah lag saat metadata model tidak tersedia.
+  * **Efek perubahan:** `maxlag_test` lebih besar meningkatkan kompleksitas fitur lag; `alpha` lebih ketat menyaring relasi kausal (sinyal bisa makin jarang).
+
+### C) Parameter adaptasi RLS dan gate stabilitas
+
+* `FORGETTING_FACTOR`
+  * **Fungsi:** Kecepatan adaptasi RLS pada update parameter `theta`/`P`.
+  * **Efek perubahan:** Lebih kecil => lebih reaktif tetapi lebih noisy; mendekati 1 => lebih stabil tetapi lambat beradaptasi.
+* `RLS_INITIAL_P_DIAG`
+  * **Fungsi:** Skala kovarians awal RLS.
+  * **Efek perubahan:** Nilai besar mempercepat adaptasi awal; terlalu besar berisiko overshoot.
+* `RLS_DEVIATION_THRESHOLD`, `RLS_DEVIATION_CLOSE_ALL_THRESHOLD`, `_RLS_DEVIATION_THRESHOLD`
+  * **Fungsi:** Ambang deviasi parameter untuk skip trade per-pair dan mode proteksi global (close all).
+  * **Efek perubahan:** Ambang lebih kecil = sistem lebih defensif (trade lebih sedikit), ambang lebih besar = lebih agresif.
+* `RLS_MIN_UPDATES_FOR_CONFIDENCE`, `RLS_CONFIDENCE_ALPHA`, `RLS_CONFIDENCE_ENTRY_THRESHOLD`, `_RLS_CONFIDENCE`
+  * **Fungsi:** Menghitung kematangan/kepercayaan model RLS sebelum entry.
+  * **Efek perubahan:** Threshold entry lebih tinggi membuat quality gate lebih ketat namun frekuensi entry turun.
+
+### D) Parameter risk sizing dan eksekusi sinyal
+
+* `EQUITY`, `RISK_PER_TRADE_PCT`
+  * **Fungsi:** Basis perhitungan lot sizing saat equity akun tidak tersedia dari broker.
+  * **Efek perubahan:** Menaikkan `RISK_PER_TRADE_PCT` memperbesar posisi dan drawdown potensial.
+* `K_ATR_STOP`, `K_MODEL_STOP`, `SNR_THRESHOLD`, `TP_RR_RATIO`
+  * **Fungsi:** Penentu SL/TP dan kualitas sinyal sebelum order dibuat.
+  * **Efek perubahan:** Stop multiplier lebih besar memperlebar SL; `SNR_THRESHOLD` tinggi menyaring sinyal lemah; `TP_RR_RATIO` tinggi menuntut reward lebih besar.
+* `RLS_SCALING_FACTOR_SL`, `RLS_SCALING_FACTOR_TP`, `RLS_SNR_INCREASE_FACTOR`, `RLS_TP_RR_MIN`, `RLS_SL_MAX_MULTIPLIER`
+  * **Fungsi:** Penyesuaian dinamis risk parameter ketika deviasi RLS membesar.
+  * **Efek perubahan:** Sistem dapat otomatis memperlebar SL, memperketat TP/RR minimum, dan menaikkan ambang SNR saat model tidak stabil.
+* `DCC_RISK_MULTIPLIER`, `DCC_FLIP_EPS_MULTIPLIER`
+  * **Fungsi:** Modulator risiko berbasis kondisi korelasi/contagion dari komponen DCC proxy.
+  * **Efek perubahan:** Nilai tinggi membuat respons terhadap rejim risiko lintas aset semakin kuat.
+* `NEWS`
+  * **Fungsi:** Gate untuk menahan keputusan trading ketika filter berita aktif.
+  * **Efek perubahan:** `True` cenderung mengurangi eksposur saat event berisiko tinggi.
+* `MAGIC_NUMBER`
+  * **Fungsi:** Identitas order/posisi milik strategi saat query posisi MT5.
+  * **Efek perubahan:** Nilai bentrok dengan EA lain dapat mencampur manajemen posisi lintas strategi.
+
+## Kriteria Model yang Bagus agar Stabil Dieksekusi oleh Sistem Ini
+
+Gunakan checklist berikut saat menyiapkan model dari pipeline training sebelum di-deploy ke VPS:
+
+1. **Struktur fitur konsisten dengan runtime**
+   * Nama kolom endogen/eksogen dan lag harus identik dengan yang dibaca monitor.
+   * Model harus kompatibel dengan grouping `VARX_ENDOG_GROUPS` dan metadata `lags_used`.
+2. **Stabil pada update online (RLS-friendly)**
+   * Koefisien baseline tidak terlalu ekstrem agar pembaruan RLS tidak meledak pada beberapa siklus pertama.
+   * Inovasi residual relatif terkontrol pada data out-of-sample terbaru.
+3. **Sinyal memiliki kualitas eksekusi, bukan hanya akurasi arah**
+   * Prediksi perlu menghasilkan rasio reward/risk yang realistis terhadap spread + volatilitas pair.
+   * Hindari model yang sering flip sinyal pada noise intrabar.
+4. **Robust lintas rejim volatilitas**
+   * Lolos validasi pada periode normal dan shock (news/high-vol events), terutama karena sistem punya gate deviasi dan filter berita.
+5. **Latensi dan footprint sesuai lingkungan VPS**
+   * Inference harus ringan dan deterministik agar tidak menunda pengambilan keputusan pada candle close.
+6. **Observability baik**
+   * Output model menyertakan artefak yang mudah didiagnosis (forecast, parameter, confidence proxy) sehingga keputusan skip/close dapat diaudit.
+
+## Hasil Tinjauan Codebase & Usulan Tugas Prioritas
+
+Berikut 4 tugas yang direkomendasikan (masing-masing satu kategori):
+
+1. **Perbaikan salah ketik**
+   * Sinkronkan nama variabel gate deviasi: ada ketidakkonsistenan penamaan `THRESHOLD` vs `TRESHOLD` pada jalur proteksi global sehingga perlu standardisasi satu nama.
+2. **Perbaikan bug**
+   * Tambahkan validasi startup yang memastikan seluruh path penting (`FITTED_MODELS_PATH`, `FRED_DATA_PATH`, `FORECAST_OUTPUT_PATH`) ada dan dapat dibaca sebelum loop monitor berjalan.
+3. **Perbaikan komentar/dokumentasi**
+   * Rapikan komentar yang tidak sesuai isi (contoh komentar FRED yang tertukar dengan deskripsi series lain) agar tidak menyesatkan saat maintenance.
+4. **Peningkatan pengujian**
+   * Tambahkan unit test untuk fungsi-fungsi kritikal monitor (mis. update RLS, penyesuaian SL/TP dinamis, dan gate entry berdasarkan confidence/deviation).
+
+---
+
 ##  Pengembangan Selanjutnya
 
 * [ ] Implementasi Control Panel interaktif pada Dashboard.
@@ -85,4 +198,3 @@ Pastikan Anda telah mengisi API Key (FRED, dll) dan kredensial MT5 pada file `pa
 **Disclaimer:** *Trading melibatkan risiko yang signifikan. Perangkat lunak ini disediakan hanya untuk tujuan penelitian dan alat bantu analisis. Pengembang tidak bertanggung jawab atas kerugian finansial yang terjadi.*
 
 ---
-

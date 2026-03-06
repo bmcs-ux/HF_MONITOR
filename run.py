@@ -127,6 +127,16 @@ def display_kassandra_opening():
 display_kassandra_opening()
 
 
+def wait_until_next_m1_open():
+    """Menunggu hingga candle M1 berikutnya open agar siklus monitoring sinkron."""
+    now = datetime.now()
+    seconds_to_wait = 60 - now.second - (now.microsecond / 1_000_000)
+    if seconds_to_wait <= 0:
+        seconds_to_wait = 60
+    print(f"[RUN.PY] Waiting {seconds_to_wait:.2f}s for next M1 open...")
+    time.sleep(seconds_to_wait)
+
+
 # --- Configuration for VPS --- 
 # Set ROOT_DIR_VPS to the absolute path where your project is cloned on the VPS
 import parameter
@@ -141,10 +151,10 @@ if ROOT_DIR_VPS not in sys.path:
 try:
     from mt5linux import MetaTrader5
     mt5 = MetaTrader5()
-    print("Kassandra menggunakan mt5linux bridge...")
+    print("Cassandra menggunakan mt5linux bridge...")
 except ImportError:
     import MetaTrader5 as mt5
-    print("kassandra menggunakan MetaTrader5 native...")
+    print("Cassandra menggunakan MetaTrader5 native...")
 
 # Reload modules to ensure they pick up the latest changes and dummy MT5 if applicable
 modules_to_reload = [
@@ -196,8 +206,8 @@ print("[RUN.PY] Starting VPS orchestration...")
 VPS_DATA_DIR = ROOT_DIR_VPS
 
 # Define local log paths within the VPS_DATA_DIR
-TRADE_ENGINE_LOG_FILE_VPS = os.path.join(VPS_DATA_DIR, "trade_engine_log_vps.txt")
-MONITOR_LOG_FILE_VPS = os.path.join(VPS_DATA_DIR, "monitor_log_vps.txt")
+TRADE_ENGINE_LOG_FILE_VPS = os.path.join(VPS_DATA_DIR, "trade_engine_log_vps.log")
+MONITOR_LOG_FILE_VPS = os.path.join(VPS_DATA_DIR, "monitor_log_vps.log")
 
 # 1. Start Trade Engine's Flask API and MT5 connection/monitoring
 print("[RUN.PY] Starting Trade Engine's Flask API and MT5 connection...")
@@ -216,6 +226,7 @@ if trade_engine_started:
     VPS_INTERVAL_SECONDS = 60 * 1            # Example: check every 1 minute
     VPS_CONFIDENCE_LEVEL = 0.95
 
+    wait_until_next_m1_open()
     monitoring_results, full_log = monitor_for_vps.start_realtime_monitoring(
         total_duration_minutes=VPS_TOTAL_DURATION_MINUTES,
         interval_seconds=VPS_INTERVAL_SECONDS,

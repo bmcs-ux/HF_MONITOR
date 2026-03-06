@@ -74,6 +74,7 @@ TRADE_ENGINE_API_URL = parameter.TRADE_ENGINE_API_URL
 
 # Runtime cache untuk stabilisasi metrik antar-siklus
 PAIR_REALIZED_STD_CACHE = {}
+_MISSING_EXOG_WARNED = set()
 KALMAN_STATE_CACHE = {}
 KALMAN_MODEL_PARAMS = {}
 
@@ -174,6 +175,7 @@ def _build_regressor_matrix(log_stream, current_hf_combined_log_returns_df, late
     # 2. Exogenous Variables
     for exog_name in exog_names_group:
         val = 0.0
+        normalized_exog_name = str(exog_name).replace('_Transformed', '').replace('_FinalTransformed', '')
         # Cek di FRED Exog
         if exog_name in latest_hf_fred_exog_df.columns:
             # PERBAIKAN DISINI: Gunakan .iloc[0] untuk menghindari KeyError pada DatetimeIndex
@@ -181,8 +183,17 @@ def _build_regressor_matrix(log_stream, current_hf_combined_log_returns_df, late
             
         elif exog_name in current_hf_combined_log_returns_df.columns:
             val = current_hf_combined_log_returns_df[exog_name].iloc[0]
+        elif normalized_exog_name in latest_hf_fred_exog_df.columns:
+            val = latest_hf_fred_exog_df[normalized_exog_name].iloc[0]
+        elif normalized_exog_name in current_hf_combined_log_returns_df.columns:
+            val = current_hf_combined_log_returns_df[normalized_exog_name].iloc[0]
         else:
-            log_stream.write(f"    [WARN] Exogenous column {exog_name} not found. Using 0.\n")
+            warn_key = (exog_name, normalized_exog_name)
+            if warn_key not in _MISSING_EXOG_WARNED:
+                log_stream.write(
+                    f"    [WARN] Exogenous column {exog_name} (alias: {normalized_exog_name}) not found. Using 0.\n"
+                )
+                _MISSING_EXOG_WARNED.add(warn_key)
             
         phi_list.append(val if pd.notnull(val) else 0.0)
 
@@ -678,13 +689,22 @@ def decide_trade(
 
     return trade_decision
 
-def detect_price_deviation(log_stream, latest_actual_prices: dict, restored_price_forecasts_with_intervals: dict, confidence_level: float = 0.95):
-    log_stream.write(f"\n[INFO] Detecting price deviations from {int(confidence_level*100)}% confidence intervals...\n")
-    deviation_results = {}
+def _estimate_forecast_std(pair_name: str, latest_price: float, confidence_level: float, kalman_metrics: Optional[dict] = None) -> float:
+    realized_std = float(PAIR_REALIZED_STD_CACHE.get(pair_name, 0.0) or 0.0)
+    if realized_std <= 0 and latest_price > 0:
+        realized_std = max(latest_price * 0.0005, 1e-6)
 
-    ci_lower_col_suffix = f'_Lower_{int(confidence_level*100)}CI'
-    ci_upper_col_suffix = f'_Upper_{int(confidence_level*100)}CI'
-    mean_col_suffix = '_Mean_Forecast'
+    kalman_z = 0.0
+    if isinstance(kalman_metrics, dict):
+        kalman_z = abs(float(kalman_metrics.get(pair_name, {}).get("innovation_zscore", 0.0)))
+    kalman_scale = 1.0 + min(kalman_z, 5.0) * 0.1
+    confidence_scale = max(0.2, 1.0 - min(max(confidence_level, 0.0), 0.999))
+    return float(max(realized_std * kalman_scale * confidence_scale, 1e-6))
+
+
+def detect_price_deviation(log_stream, latest_actual_prices: dict, rls_forecasts: dict, kalman_metrics: Optional[dict] = None, confidence_level: float = 0.95):
+    log_stream.write(f"\n[INFO] Detecting price deviations from model forecast (RLS + Kalman) at {int(confidence_level*100)}% confidence...\n")
+    deviation_results = {}
 
     for pair_name, actual_price in latest_actual_prices.items():
         log_stream.write(f"  [INFO] Checking deviation for {pair_name}. Actual price: {actual_price:.4f}\n")
@@ -698,59 +718,37 @@ def detect_price_deviation(log_stream, latest_actual_prices: dict, restored_pric
             'forecast_std': np.nan
         }
 
-        if pair_name in restored_price_forecasts_with_intervals:
-            forecast_df = restored_price_forecasts_with_intervals[pair_name]
-            if forecast_df.empty:
-                log_stream.write(f"    [WARN] Forecast DataFrame for {pair_name} is empty. Skipping deviation check.\n")
+        if pair_name in rls_forecasts and isinstance(rls_forecasts[pair_name], dict):
+            predicted_mean = float(rls_forecasts[pair_name].get("rls_predicted_price", np.nan))
+            if not np.isfinite(predicted_mean):
+                log_stream.write(f"    [WARN] Invalid predicted mean for {pair_name}. Skipping deviation check.\n")
                 deviation_results[pair_name] = deviation_info
                 continue
 
-            first_forecast_step = forecast_df.iloc[0]
+            forecast_std = _estimate_forecast_std(pair_name, float(actual_price), confidence_level, kalman_metrics)
+            z_score_value = norm.ppf(1 - (1 - confidence_level) / 2)
+            lower_ci = predicted_mean - (z_score_value * forecast_std)
+            upper_ci = predicted_mean + (z_score_value * forecast_std)
 
-            mean_forecast_col = f'Close{mean_col_suffix}'
-            lower_ci_col = f'Close{ci_lower_col_suffix}'
-            upper_ci_col = f'Close{ci_upper_col_suffix}'
+            deviation_info['predicted_mean'] = predicted_mean
+            deviation_info['lower_ci'] = lower_ci
+            deviation_info['upper_ci'] = upper_ci
+            deviation_info['forecast_std'] = float(forecast_std)
 
-            if all(col in first_forecast_step.index for col in [mean_forecast_col, lower_ci_col, upper_ci_col]):
-                predicted_mean = float(first_forecast_step[mean_forecast_col])
-                lower_ci = float(first_forecast_step[lower_ci_col])
-                upper_ci = float(first_forecast_step[upper_ci_col]) 
+            log_stream.write(f"    [INFO] Forecasted Mean: {predicted_mean:.4f}, CI: [{lower_ci:.4f}, {upper_ci:.4f}]\n")
 
-                deviation_info['predicted_mean'] = predicted_mean
-                deviation_info['lower_ci'] = lower_ci
-                deviation_info['upper_ci'] = upper_ci
-
-                z_score_value = norm.ppf(1 - (1 - confidence_level) / 2)
-                forecast_std = (upper_ci - predicted_mean) / z_score_value if z_score_value != 0 else np.nan
-                if np.isnan(forecast_std) or forecast_std <= 0:
-                    forecast_std = (predicted_mean - lower_ci) / z_score_value if z_score_value != 0 else np.nan
-
-                adaptive_std_floor = PAIR_REALIZED_STD_CACHE.get(pair_name, np.nan)
-                adaptive_multiplier = getattr(parameter, "RLS_DEVIATION_ADAPTIVE_STD_MULTIPLIER", 0.5)
-                if pd.notnull(adaptive_std_floor) and adaptive_std_floor > 0:
-                    forecast_std = max(forecast_std, adaptive_std_floor * adaptive_multiplier)
-
-                deviation_info['forecast_std'] = float(forecast_std)
-
-                log_stream.write(f"    [INFO] Forecasted Mean: {predicted_mean:.4f}, CI: [{lower_ci:.4f}, {upper_ci:.4f}]\n")
-
-                if actual_price < lower_ci:
-                    deviation_info['ci_breach'] = True
-                    if forecast_std > 0:
-                        deviation_info['deviation_metric'] = (actual_price - predicted_mean) / forecast_std
-                    log_stream.write(f"    [ALERT] Actual price {actual_price:.4f} is BELOW lower CI {lower_ci:.4f} for {pair_name}. Deviation: {deviation_info['deviation_metric']:.2f} std devs.\n")
-                elif actual_price > upper_ci:
-                    deviation_info['ci_breach'] = True
-                    if forecast_std > 0:
-                        deviation_info['deviation_metric'] = (actual_price - predicted_mean) / forecast_std
-                    log_stream.write(f"    [ALERT] Actual price {actual_price:.4f} is ABOVE upper CI {upper_ci:.4f} for {pair_name}. Deviation: {deviation_info['deviation_metric']:.2f} std devs.\n")
-                else:
-                    log_stream.write(f"    [INFO] Actual price {actual_price:.4f} is within CI for {pair_name}.\n")
-
+            if actual_price < lower_ci:
+                deviation_info['ci_breach'] = True
+                deviation_info['deviation_metric'] = (actual_price - predicted_mean) / forecast_std
+                log_stream.write(f"    [ALERT] Actual price {actual_price:.4f} is BELOW lower CI {lower_ci:.4f} for {pair_name}. Deviation: {deviation_info['deviation_metric']:.2f} std devs.\n")
+            elif actual_price > upper_ci:
+                deviation_info['ci_breach'] = True
+                deviation_info['deviation_metric'] = (actual_price - predicted_mean) / forecast_std
+                log_stream.write(f"    [ALERT] Actual price {actual_price:.4f} is ABOVE upper CI {upper_ci:.4f} for {pair_name}. Deviation: {deviation_info['deviation_metric']:.2f} std devs.\n")
             else:
-                log_stream.write(f"    [WARN] Required forecast columns (Close{mean_col_suffix}, Close{ci_lower_col_suffix}, Close{ci_upper_col_suffix}) not found for {pair_name}. Skipping deviation check.\n")
+                log_stream.write(f"    [INFO] Actual price {actual_price:.4f} is within CI for {pair_name}.\n")
         else:
-            log_stream.write(f"    [WARN] No restored price forecasts found for {pair_name}. Skipping deviation check.\n")
+            log_stream.write(f"    [WARN] No model forecast found for {pair_name}. Skipping deviation check.\n")
 
         deviation_results[pair_name] = deviation_info
 
@@ -955,11 +953,11 @@ def start_realtime_monitoring(
         with open(forecast_path, 'rb') as f:
             loaded_data = pickle.load(f)
             restored_price_forecasts_with_intervals = loaded_data.get("data", {})
-        log_stream_main.write(f"[OK] Successfully loaded restored_price_forecasts_with_intervals from {forecast_path}\n")
+        log_stream_main.write(f"[INFO] Loaded legacy restored forecasts from {forecast_path} (optional).\n")
     except FileNotFoundError:
-        log_stream_main.write(f"[WARN] Forecast data file not found at {forecast_path}. Monitoring will be incomplete.\n")
+        log_stream_main.write(f"[INFO] Legacy forecast data not found at {forecast_path}. Using model-based deviation logic.\n")
     except Exception as e:
-        log_stream_main.write(f"[ERROR] Failed to load restored_price_forecasts_with_intervals from {forecast_path}: {e}\n")
+        log_stream_main.write(f"[WARN] Failed to load legacy restored forecasts from {forecast_path}: {e}. Continuing with model-based logic.\n")
     log_stream_main.flush()
 
     try:
@@ -1085,12 +1083,12 @@ def start_realtime_monitoring(
         log_stream_main.write(f"[WARN] No ensemble models provided for estimator initialization.\n")
         log_stream_main.flush()
 
-    if not restored_price_forecasts_with_intervals or not ensemble_models:
-        log_stream_main.write("[ERROR] Critical data or models missing. Cannot proceed with monitoring. Please ensure files are transferred correctly.\n")
+    if not ensemble_models:
+        log_stream_main.write("[ERROR] Ensemble model payload missing. Cannot proceed with monitoring.\n")
         log_stream_main.flush()
         if log_output_path: log_stream_main.close()
         mt5_adapter_instance.shutdown()
-        return [], "Critical data missing, monitoring aborted."
+        return [], "Ensemble model missing, monitoring aborted."
 
     try:
         while time.time() < end_time:
@@ -1366,7 +1364,7 @@ def start_realtime_monitoring(
             log_stream.flush()
 
             if global_rls_confidence < parameter.RLS_CONFIDENCE_ENTRY_THRESHOLD:
-                skip_individual_trade_decisions = True
+                skip_individual_trade_decisions = parameter._RLS_CONFIDENCE
                 log_stream.write(
                     f"    [WARN] Global RLS Confidence ({global_rls_confidence:.4f}) "
                     f"is below Entry Threshold ({parameter.RLS_CONFIDENCE_ENTRY_THRESHOLD:.4f}). "
@@ -1380,28 +1378,21 @@ def start_realtime_monitoring(
             if rls_param_deviation_score > parameter.RLS_DEVIATION_CLOSE_ALL_THRESHOLD:
                 log_stream.write(f"\n    [ALERT] RLS parameter deviation ({rls_param_deviation_score:.4f}) exceeds GLOBAL CLOSE ALL threshold ({parameter.RLS_DEVIATION_CLOSE_ALL_THRESHOLD:.4f}). Sending signal to close all open positions.\n")
                 send_signal_to_trade_engine({"signal_id": f"CLOSE_ALL_RISK_{pipeline_run_id_for_monitor}_{cycle_count}", "action": "CLOSE_ALL"}, log_stream)
-                skip_individual_trade_decisions = True
+                skip_individual_trade_decisions = parameter._RLS_DEVIATION_TRESHOLD
                 log_stream.flush()
             else:
                 log_stream.write(f"    [INFO] Global RLS deviation ({rls_param_deviation_score:.4f}) is below CLOSE ALL threshold.\n")
                 log_stream.flush()
 
-            deviation_results = detect_price_deviation(
-                log_stream,
-                latest_hf_actual_prices,
-                restored_price_forecasts_with_intervals,
-                confidence_level
-            )
-
             if news_manager_instance.is_currently_restricted():
-                skip_individual_trade_decisions = True
+                skip_individual_trade_decisions = parameter.NEWS
                 log_stream.write(f"    [WARN] News restriction detected. Setting skip_individual_trade_decisions to True.\n")
                 log_stream.flush()
 
             trade_signals = {}
 
             if not skip_individual_trade_decisions:
-                for pair_name, forecast_data in restored_price_forecasts_with_intervals.items():
+                for pair_name in latest_hf_actual_prices:
 
                     if pair_name not in latest_hf_actual_prices or pair_name not in latest_hf_atrs:
                         log_stream.write(
@@ -1419,15 +1410,22 @@ def start_realtime_monitoring(
                         }
                         continue
 
-                    first_forecast_step = forecast_data.iloc[0]
-                    predicted_mean = first_forecast_step["Close_Mean_Forecast"]
-                 
-                    z_score_value = norm.ppf(1 - (1 - confidence_level) / 2)
-                    upper_ci = first_forecast_step[f"Close_Upper_{int(confidence_level*100)}CI"]
-                    forecast_std = (upper_ci - predicted_mean) / z_score_value if z_score_value != 0 else np.nan
-                    steps_in_period = 96 # D1 ke M15 = (24 jam * 60 menit) / 15 menit = 96
-                    forecast_std_price_per_bar = forecast_std / np.sqrt(steps_in_period)
-                    forecast_std_return = forecast_std_price_per_bar / latest_hf_actual_prices[pair_name] # forecast_std is PRICE std; converted to RETURN only for SNR
+                    rls_expected_return = infer_rls_expected_return(
+                        log_stream=log_stream,
+                        pair_name=pair_name, # Fungsi akan mencari group & index sendiri
+                        rls_estimators=rls_estimators,
+                        current_hf_combined_log_returns_df=latest_hf_combined_log_returns_df_row,
+                        latest_hf_fred_exog_df=latest_hf_fred_exog_df_row,
+                        lagged_hf_log_returns_df=lagged_hf_log_returns_df
+                    )
+
+                    if rls_expected_return is None:
+                        trade_signals[pair_name] = {"signal": "HOLD", "reason": "RLS unavailable"}
+                        continue
+
+                    predicted_mean = latest_hf_actual_prices[pair_name] * np.exp(rls_expected_return)
+                    forecast_std = _estimate_forecast_std(pair_name, latest_hf_actual_prices[pair_name], confidence_level, kalman_metrics)
+                    forecast_std_return = forecast_std / max(latest_hf_actual_prices[pair_name], 1e-12)
 
                     pair_group = PAIR_TO_RLS_GROUP.get(pair_name)
 
@@ -1449,25 +1447,10 @@ def start_realtime_monitoring(
                         }
                         continue
                     
-                    rls_expected_return = infer_rls_expected_return(
-                        log_stream=log_stream,
-                        pair_name=pair_name, # Fungsi akan mencari group & index sendiri
-                        rls_estimators=rls_estimators,
-                        current_hf_combined_log_returns_df=latest_hf_combined_log_returns_df_row,
-                        latest_hf_fred_exog_df=latest_hf_fred_exog_df_row,
-                        lagged_hf_log_returns_df=lagged_hf_log_returns_df
-                    )
-
-                    rls_predicted_price = latest_hf_actual_prices[pair_name] * np.exp(rls_expected_return)
-
                     rls_forecasts[pair_name] = {
-                        "rls_predicted_price": float(rls_predicted_price),
+                        "rls_predicted_price": float(predicted_mean),
                         "rls_expected_return_pct": float(rls_expected_return * 100)
                     }
-
-                    if rls_expected_return is None:
-                        trade_signals[pair_name] = HOLD_REASON("RLS unavailable")
-                        continue
 
                     pair_rls_deviation = parameter_deviations.get(pair_group, float("inf"))
 
@@ -1589,7 +1572,7 @@ def start_realtime_monitoring(
                     f"    [INFO] Skipping individual trade decisions. Reasons: [{reason_str}]\n"
                 )
 
-                for pair_name in restored_price_forecasts_with_intervals:
+                for pair_name in latest_hf_actual_prices:
                     trade_signals[pair_name] = {
                         "signal": "HOLD",
                         "entry_price": latest_hf_actual_prices.get(pair_name, np.nan),
@@ -1598,9 +1581,16 @@ def start_realtime_monitoring(
                         "position_units": 0,
                         "rr_ratio": np.nan,
                         "snr": np.nan,
-                        "reason": "Skipped due to global RLS deviation threshold breach",
+                        "reason": f"Skipped by safety filter: {reason_str}",
                     }
 
+            deviation_results = detect_price_deviation(
+                log_stream,
+                latest_hf_actual_prices,
+                rls_forecasts,
+                kalman_metrics,
+                confidence_level
+            )
 
             current_cycle_results = {
                 "cycle_number": cycle_count,
@@ -1624,51 +1614,38 @@ def start_realtime_monitoring(
             log_stream.write(f"\n[INFO] Checking for position modifications...\n")
             if mt5_adapter_instance._logged_in:
                 open_positions = mt5_adapter_instance.positions_get(magic=parameter.MAGIC_NUMBER)
+
                 if open_positions:
                     log_stream.write(f"  [INFO] Found {len(open_positions)} open positions to consider for modification.\n")
+
                     for pos in open_positions:
                         pos_symbol = pos.symbol
                         pos_ticket = pos.ticket
                         pos_type = pos.type
                         current_sl = pos.sl
                         current_tp = pos.tp
-                        pos_open_price = pos.price_open
+                        latest_actual_price = latest_hf_actual_prices.get(pos_symbol) # Pastikan mapping symbol benar
 
+                        # 1. Mapping Simbol MT5 ke Nama Internal
                         mapped_pair_name = None
                         for p_name, yf_symbol in parameter.PAIRS.items():
                             if pos_symbol.replace("/", "").replace("=X", "") == yf_symbol.replace("=X", "").replace("-", "").replace("/", ""):
                                 mapped_pair_name = p_name
                                 break
+
                         if mapped_pair_name is None:
-                            log_stream.write(f"    [WARN] Could not map MT5 symbol '{pos_symbol}' to a known pair name. Skipping modification for ticket {pos_ticket}.\n")
+                            log_stream.write(f"    [WARN] Could not map MT5 symbol '{pos_symbol}' to internal name. Skipping.\n")
                             continue
 
-                        if mapped_pair_name not in restored_price_forecasts_with_intervals or \
-                           mapped_pair_name not in latest_hf_actual_prices or \
-                           mapped_pair_name not in latest_hf_atrs:
-                            log_stream.write(f"    [WARN] Missing forecast/price/ATR data for {mapped_pair_name}. Skipping modification for ticket {pos_ticket}.\n")
+                        # 2. Validasi Data RLS/ATR (Hapus pengecekan restored_forecast)
+                        if mapped_pair_name not in latest_hf_actual_prices or mapped_pair_name not in latest_hf_atrs:
+                            log_stream.write(f"    [WARN] Missing price/ATR data for {mapped_pair_name}. Skipping ticket {pos_ticket}.\n")
                             continue
 
-                        forecast_data_for_pair = restored_price_forecasts_with_intervals[mapped_pair_name]
-                        if forecast_data_for_pair.empty:
-                            log_stream.write(f"    [WARN] Forecast data is empty for {mapped_pair_name}. Skipping ticket {pos_ticket}.\n")
-                            continue
-                        
-                        # 3. Ekstraksi Parameter Forecast
-                        first_forecast_step = forecast_data_for_pair.iloc[0]
-                        predicted_mean = first_forecast_step[f'Close_Mean_Forecast']
-                        z_score_value = norm.ppf(1 - (1 - confidence_level) / 2)
-                        upper_ci = first_forecast_step[f'Close_Upper_{int(confidence_level*100)}CI']
-                        forecast_std = (upper_ci - predicted_mean) / z_score_value if z_score_value != 0 else np.nan
+                        latest_actual_price = latest_hf_actual_prices[mapped_pair_name]
+                        hf_atr = latest_hf_atrs[mapped_pair_name]
 
-                        if np.isnan(forecast_std) or forecast_std <= 0:
-                            log_stream.write(f"    [WARN] Invalid forecast standard deviation for {mapped_pair_name}. Skipping ticket {pos_ticket}.\n")
-                            continue
-
-                        is_buy = pos_type == mt5_adapter_instance.ORDER_TYPE_BUY
-                        is_sell = pos_type == mt5_adapter_instance.ORDER_TYPE_SELL
-
-                        # 4. Inferensi RLS Expected Return (Automated Group Search)
+                        # 3. Inferensi RLS Expected Return & Volatility
                         rls_expected_return = infer_rls_expected_return(
                             log_stream=log_stream,
                             pair_name=mapped_pair_name,
@@ -1679,19 +1656,27 @@ def start_realtime_monitoring(
                         )
 
                         if rls_expected_return is None:
-                            log_stream.write(f"    [WARN] RLS expected return unavailable for {mapped_pair_name}. Skipping flip check for {pos_ticket}.\n")
+                            log_stream.write(f"    [WARN] RLS return unavailable for {mapped_pair_name}. Skipping.\n")
                             continue
 
-                        # 5. Logika RLS Direction Flip (Exit Early)
-                        latest_actual_price = latest_hf_actual_prices.get(mapped_pair_name)
-                        hf_atr = latest_hf_atrs.get(mapped_pair_name)
-                        pair_group_for_flip = PAIR_TO_RLS_GROUP.get(mapped_pair_name)
-                        dcc_score_for_flip = dcc_group_metrics.get(pair_group_for_flip, {}).get("contagion_score", 0.0)
-                        dcc_flip_multiplier = 1 + (dcc_score_for_flip * float(getattr(parameter, "DCC_FLIP_EPS_MULTIPLIER", 0.5)))
-                        RLS_FLIP_EPS = forecast_std_return * dcc_flip_multiplier  # Gunakan volatilitas model yang disesuaikan contagion
+                        # Estimasi Volatilitas Model (Forecast Std) dari Kalman
+                        forecast_std = _estimate_forecast_std(mapped_pair_name, latest_actual_price, confidence_level, kalman_metrics)
+                        forecast_std_return = forecast_std / max(latest_actual_price, 1e-12)
 
-                        kalman_result_pos = _run_kalman_filter_step(mapped_pair_name, latest_actual_price)
-                        kalman_break = abs(kalman_result_pos["innovation_zscore"]) >= float(getattr(parameter, "KALMAN_FLIP_ZSCORE", 3.0))
+                        # 4. Logika Exit Early (RLS Flip & Kalman Breach)
+                        pair_group = PAIR_TO_RLS_GROUP.get(mapped_pair_name)
+                        dcc_score = dcc_group_metrics.get(pair_group, {}).get("contagion_score", 0.0)
+                        dcc_flip_multiplier = 1 + (dcc_score * float(getattr(parameter, "DCC_FLIP_EPS_MULTIPLIER", 0.5)))
+
+                        # Threshold untuk menutup posisi jika prediksi berlawanan dengan arah trade
+                        RLS_FLIP_EPS = forecast_std_return * dcc_flip_multiplier
+
+                        # Kalman Filter Z-Score Breach (Deteksi anomali harga mendadak)
+                        kalman_result = _run_kalman_filter_step(mapped_pair_name, latest_actual_price)
+                        kalman_break = abs(kalman_result["innovation_zscore"]) >= float(getattr(parameter, "KALMAN_FLIP_ZSCORE", 3.0))
+
+                        is_buy = pos_type == mt5_adapter_instance.ORDER_TYPE_BUY
+                        is_sell = pos_type == mt5_adapter_instance.ORDER_TYPE_SELL
 
                         close_due_to_rls_flip = (
                             (is_buy and rls_expected_return < -RLS_FLIP_EPS) or
@@ -1700,81 +1685,49 @@ def start_realtime_monitoring(
                         )
 
                         if close_due_to_rls_flip:
-                            log_stream.write(f"    [ALERT] Closing position {pos_ticket} ({mapped_pair_name}) due to RLS flip. μ={rls_expected_return:+.6f}\n")
+                            reason = "RLS Flip" if not kalman_break else "Kalman Anomaly"
+                            log_stream.write(f"    [ALERT] Closing {pos_ticket} ({mapped_pair_name}): {reason}. ={rls_expected_return:+.6f}\n")
                             close_signal = {
-                                "signal_id": f"CLOSE_RLS_FLIP_{pos_ticket}_{cycle_count}",
+                                "signal_id": f"CLOSE_FLIP_{pos_ticket}_{cycle_count}",
                                 "action": "CLOSE",
                                 "ticket": pos_ticket,
-                                "symbol": mapped_pair_name,
-                                "reason": "RLS direction flip"
+                                "symbol": pos_symbol,
+                                "reason": reason
                             }
                             send_signal_to_trade_engine(close_signal, log_stream)
                             continue 
 
-                        # 6. Penentuan pair_group untuk SL/TP Adjustments
-                        # Dicari ulang dari estimators untuk menjaga konsistensi state
-                        pair_group = next((g for g, est in rls_estimators.items() 
-                                          if any(mapped_pair_name in n for n in est['endog_names'])), None)
+                        # 5. Dynamic SL/TP Adjustments
+                        # Ambil skor deviasi parameter untuk menyesuaikan ketatnya stop loss
+                        pair_rls_deviation = parameter_deviations.get(pair_group, 0.0)
+                        increase_factor_sl = 1 + pair_rls_deviation * parameter.RLS_SCALING_FACTOR_SL
 
-                        # 7. Dynamic SL/TP Adjustments berdasarkan RLS Deviation Score
-                        k_atr_stop_adjusted = parameter.K_ATR_STOP
-                        k_model_stop_adjusted = parameter.K_MODEL_STOP
-                        tp_rr_ratio_adjusted = parameter.TP_RR_RATIO
+                        k_atr_stop_adj = min(parameter.K_ATR_STOP * increase_factor_sl, 
+                                 parameter.K_ATR_STOP * parameter.RLS_SL_MAX_MULTIPLIER)
+                        k_model_stop_adj = min(parameter.K_MODEL_STOP * increase_factor_sl, 
+                                   parameter.K_MODEL_STOP * parameter.RLS_SL_MAX_MULTIPLIER)
 
-                        if pair_group and rls_param_deviation_score is not None and not np.isnan(rls_param_deviation_score):
-                            pair_rls_deviation = parameter_deviations.get(pair_group, 0.0)
-                            increase_factor_sl = 1 + pair_rls_deviation * parameter.RLS_SCALING_FACTOR_SL
-                            
-                            k_atr_stop_adjusted = min(parameter.K_ATR_STOP * increase_factor_sl, 
-                                                      parameter.K_ATR_STOP * parameter.RLS_SL_MAX_MULTIPLIER)
-                            k_model_stop_adjusted = min(parameter.K_MODEL_STOP * increase_factor_sl, 
-                                                        parameter.K_MODEL_STOP * parameter.RLS_SL_MAX_MULTIPLIER)
+                        # 6. Kalkulasi Target SL/TP Baru
+                        sl_dist = max(k_atr_stop_adj * hf_atr, k_model_stop_adj * forecast_std)
+                        new_tp = latest_actual_price * np.exp(rls_expected_return) # Target profit dinamis dari RLS
 
-                            reduction_factor_tp = 1 - (pair_rls_deviation * parameter.RLS_SCALING_FACTOR_TP)
-                            tp_rr_ratio_adjusted = max(parameter.RLS_TP_RR_MIN, tp_rr_ratio_adjusted * reduction_factor_tp)
-                            
-                            log_stream.write(f"    [INFO] Dynamic adjustments: k_atr={k_atr_stop_adjusted:.2f}, k_model={k_model_stop_adjusted:.2f}, TP_RR={tp_rr_ratio_adjusted:.2f}\n")
-
-                        # 8. Kalkulasi Jarak SL/TP Baru
-                        predicted_mean_rls = latest_actual_price * np.exp(rls_expected_return)
-                        sl_dist_atr = k_atr_stop_adjusted * hf_atr
-                        sl_dist_model = (k_model_stop_adjusted * forecast_std_return * latest_actual_price)
-                        sl_dist = max(sl_dist_atr, sl_dist_model)
-
-                        if sl_dist <= 1e-9:
-                            log_stream.write(f"    [WARN] SL Distance too small for {mapped_pair_name} ({pos_ticket}). Skipping.\n")
-                            continue
-
-                        # A. SL Baru: One-Way Trailing (Hanya bergerak mendekati harga profit)
                         if is_buy:
                             target_sl = latest_actual_price - sl_dist
-                            # SL hanya boleh naik (max)
                             new_sl = max(target_sl, current_sl) if current_sl != 0 else target_sl
-                            # TP dihitung dari harga OPEN (Fixed Target)
-                            new_tp = predicted_mean_rls
                         else:
                             target_sl = latest_actual_price + sl_dist
-                            # SL hanya boleh turun (min)
                             new_sl = min(target_sl, current_sl) if current_sl != 0 else target_sl
-                            # TP dihitung dari harga OPEN (Fixed Target)
-                            new_tp = predicted_mean_rls
-                        if new_sl < 0 or new_tp < 0:
-                             log_stream.write(f"    [WARN] Non-positive SL/TP for {mapped_pair_name} ({pos_ticket}). Skipping.\n")
-                             continue
 
-                        # 9. Verifikasi Threshold Modifikasi (Point Checking)
-                        symbol_info_for_pos = mt5_adapter_instance.symbol_info(pos_symbol)
-                        if symbol_info_for_pos is None:
-                            continue
-                        
-                        min_price_change = symbol_info_for_pos.point * 10
-                        if abs(new_sl - current_sl) > min_price_change or abs(new_tp - current_tp) > min_price_change:
-                            log_stream.write(f"    [INFO] Sending MODIFY Ticket {pos_ticket} ({mapped_pair_name}). New SL: {new_sl:.4f}, TP: {new_tp:.4f}\n")
+                        # 7. Eksekusi Modifikasi jika melewati threshold minimum (point)
+                        symbol_info = mt5_adapter_instance.symbol_info(pos_symbol)
+                        min_change = symbol_info.point * 10 if symbol_info else 0.0001
+
+                        if abs(new_sl - current_sl) > min_change or abs(new_tp - current_tp) > min_change:
                             modify_signal = {
-                                "signal_id": f"MODIFY_SLTP_{pos_ticket}_{cycle_count}",
+                                "signal_id": f"MODIFY_{pos_ticket}_{cycle_count}",
                                 "action": "MODIFY",
                                 "ticket": pos_ticket,
-                                "symbol": mapped_pair_name,
+                                "symbol": pos_symbol,
                                 "new_sl": new_sl,
                                 "new_tp": new_tp
                             }
