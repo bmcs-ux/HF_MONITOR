@@ -9,6 +9,11 @@ ROOT_DIR = os.getenv("HF_ROOT_DIR", "/home/bimachasin86/VARX_REGRESION")
 VPS_PARAM_DIR = ROOT_DIR
 VPS_DATA_DIR = ROOT_DIR
 
+# Storage Paths
+FORECAST_OUTPUT_PATH = os.path.join(ROOT_DIR, 'vps_sync', 'restored_forecasts.pkl')
+FRED_DATA_PATH = os.path.join(ROOT_DIR, 'vps_sync', 'final_fred_data.pkl')
+FITTED_MODELS_PATH = os.path.join(ROOT_DIR, 'vps_sync', 'fitted_models.pkl') # Path for fitted ensemble models
+
 # Credentials and API keys (set via environment variables in production)
 MT5_LOGIN = os.getenv("MT5_LOGIN", 206905748)
 MT5_PASSWORD = os.getenv("MT5_PASSWORD", "Bima12345#")
@@ -37,8 +42,8 @@ PAIRS = {
 
 
 # NEW: Data window & base interval to download for HIGH-FREQUENCY MONITORING
-HF_LOOKBACK_DAYS = 30         # e.g., last 6 days for high-frequency data
-HF_BASE_INTERVAL = "1h"     # e.g., 15-minute interval for high-frequency data
+HF_LOOKBACK_DAYS = 3         # e.g., last 6 days for high-frequency data
+HF_BASE_INTERVAL = "1m"     # e.g., 15-minute interval for high-frequency data
 
 # Timeframes we will analyse (mapping ke faktor resample)
 TF_MAP = {
@@ -101,7 +106,7 @@ RLS_DEVIATION_CLOSE_ALL_THRESHOLD = 7.1 # NEW: Threshold to trigger closing all 
 RLS_SCALING_FACTOR_SL = 0.15 # Scales the increase in k_atr_stop and k_model_stop
 RLS_SCALING_FACTOR_TP = 0.35 # Scales the reduction in tp_rr_ratio
 RLS_SNR_INCREASE_FACTOR = 0.05 # Scales the increase in snr_threshold
-RLS_TP_RR_MIN = 0.3 # Minimum acceptable tp_rr_ratio
+RLS_TP_RR_MIN = 0.5 # Minimum acceptable tp_rr_ratio
 RLS_SL_MAX_MULTIPLIER = 2.2 # Maximum allowed multiplier for k_atr_stop and k_model_stop
 
 
@@ -118,15 +123,10 @@ MAGIC_NUMBER = 202401
 # Trade management
 EQUITY = 1000
 RISK_PER_TRADE_PCT = 0.1
-K_ATR_STOP = 0.5
+K_ATR_STOP = 0.6
 K_MODEL_STOP = 1.0
 SNR_THRESHOLD = 0.1
 TP_RR_RATIO = 1.0
-# Storage Paths
-FORECAST_OUTPUT_PATH = os.path.join(ROOT_DIR, 'vps_sync', 'restored_forecasts.pkl')
-FRED_DATA_PATH = os.path.join(ROOT_DIR, 'vps_sync', 'final_fred_data.pkl')
-FITTED_MODELS_PATH = os.path.join(ROOT_DIR, 'vps_sync', 'fitted_models.pkl') # Path for fitted ensemble models
-
 
 # Adaptive safeguards for mixed-timeframe RLS monitoring
 RLS_VOLATILITY_WINDOW = 96
@@ -135,8 +135,8 @@ RLS_DEVIATION_ADAPTIVE_STD_MULTIPLIER = 0.5
 
 
 # Multi-timeframe consensus & execution tuning
-CONSENSUS_WEIGHT_D1 = 0.5
-CONSENSUS_WEIGHT_H1 = 0.3
+CONSENSUS_WEIGHT_D1 = 0.4
+CONSENSUS_WEIGHT_H1 = 0.5
 CONSENSUS_WEIGHT_M15 = 0.2
 CONSENSUS_THRESHOLD = 0.15
 

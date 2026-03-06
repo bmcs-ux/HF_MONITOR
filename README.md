@@ -49,6 +49,11 @@ cd HF_MONITOR
 ```bash
 python3 -m venv venv
 source venv/bin/activate
+# Pastikan rpyc sudah terinstall
+pip install rpyc
+
+# Jalankan rpyc_classic server (default port 18812)
+rpyc_classic.py --mode=THREADED
 
 ```
 
