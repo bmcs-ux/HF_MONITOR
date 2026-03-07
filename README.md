@@ -177,13 +177,13 @@ Gunakan checklist berikut saat menyiapkan model dari pipeline training sebelum d
 Berikut 4 tugas yang direkomendasikan (masing-masing satu kategori):
 
 1. **Perbaikan salah ketik**
-   * Sinkronkan nama variabel gate deviasi: ada ketidakkonsistenan penamaan `THRESHOLD` vs `TRESHOLD` pada jalur proteksi global sehingga perlu standardisasi satu nama.
+   * Standardisasi nama variabel gate deviasi agar konsisten pada seluruh jalur proteksi global (`THRESHOLD`, bukan `TRESHOLD`).
 2. **Perbaikan bug**
-   * Tambahkan validasi startup yang memastikan seluruh path penting (`FITTED_MODELS_PATH`, `FRED_DATA_PATH`, `FORECAST_OUTPUT_PATH`) ada dan dapat dibaca sebelum loop monitor berjalan.
+   * Perbaiki perhitungan confidence RLS agar tidak selalu `0` selama warm-up, serta gunakan agregasi confidence global berbobot maturity supaya grup aktif tidak tenggelam oleh grup yang belum siap.
 3. **Perbaikan komentar/dokumentasi**
-   * Rapikan komentar yang tidak sesuai isi (contoh komentar FRED yang tertukar dengan deskripsi series lain) agar tidak menyesatkan saat maintenance.
+   * Selaraskan dokumentasi metrik health RLS dengan implementasi terbaru (termasuk fallback `pred_var` saat varians prediksi tidak stabil) agar troubleshooting lebih akurat.
 4. **Peningkatan pengujian**
-   * Tambahkan unit test untuk fungsi-fungsi kritikal monitor (mis. update RLS, penyesuaian SL/TP dinamis, dan gate entry berdasarkan confidence/deviation).
+   * Tambahkan unit test source-level untuk helper confidence, agregasi global maturity-weighted, dan verifikasi typo gate deviasi agar regresi cepat terdeteksi.
 
 ---
 
