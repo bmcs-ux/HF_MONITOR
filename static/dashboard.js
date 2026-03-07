@@ -16,6 +16,31 @@ function renderPriceTable(actuals, forecasts){
   }).join('');
 }
 
+function formatCountdown(seconds){
+  if(seconds===null || seconds===undefined || Number.isNaN(Number(seconds))) return '-';
+  const total=Math.max(0,Math.floor(Number(seconds)));
+  const hrs=Math.floor(total/3600);
+  const mins=Math.floor((total%3600)/60);
+  const secs=total%60;
+  return `${String(hrs).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+}
+
+function renderNewsStatus(newsStatus){
+  const nextTitle=newsStatus?.next_event?.title || '-';
+  const nextCountry=newsStatus?.next_event?.country || '-';
+  const isRestricted=Boolean(newsStatus?.is_restricted);
+  const statusLabel=isRestricted ? 'ACTIVE (trading paused by NEWS gate)' : 'INACTIVE';
+  const payload={
+    status: statusLabel,
+    countdown_to_next_high_impact: formatCountdown(newsStatus?.seconds_to_next_event),
+    next_event_title: nextTitle,
+    next_event_country: nextCountry,
+    next_event_time_utc: newsStatus?.next_event?.event_time_utc || '-',
+    active_event: newsStatus?.active_event || null,
+  };
+  document.getElementById('news-status').textContent=fmt(payload);
+}
+
 async function updateUI(){
   const res=await fetch('/api/get_data');
   const data=await res.json();
@@ -27,6 +52,8 @@ async function updateUI(){
   document.getElementById('kalman-metrics').textContent=fmt(data.kalman_metrics);
   document.getElementById('consensus-metrics').textContent=fmt(data.consensus_metrics);
   document.getElementById('mean-reversion').textContent=fmt(data.mean_reversion_candidates);
+  document.getElementById('news-status').textContent=fmt(data.news_status);
+  renderNewsStatus(data.news_status);
   document.getElementById('trade-signals').textContent=fmt(data.trade_signals);
   document.getElementById('open-trades').textContent=fmt(data.open_trades_summary);
   document.getElementById('logs').textContent=fmt((data.logs||[]).slice(0,8));
