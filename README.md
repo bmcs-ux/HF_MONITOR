@@ -148,6 +148,7 @@ Di bawah ini adalah parameter yang **benar-benar dipakai** oleh `monitor_for_vps
 * `NEWS`
   * **Fungsi:** Gate untuk menahan keputusan trading ketika filter berita aktif.
   * **Efek perubahan:** `True` cenderung mengurangi eksposur saat event berisiko tinggi.
+  * **Observability:** Dashboard kini menampilkan `news_status` dengan countdown menuju High Impact event berikutnya agar waktu aktivasi gate mudah dipantau.
 * `MAGIC_NUMBER`
   * **Fungsi:** Identitas order/posisi milik strategi saat query posisi MT5.
   * **Efek perubahan:** Nilai bentrok dengan EA lain dapat mencampur manajemen posisi lintas strategi.
@@ -177,13 +178,13 @@ Gunakan checklist berikut saat menyiapkan model dari pipeline training sebelum d
 Berikut 4 tugas yang direkomendasikan (masing-masing satu kategori):
 
 1. **Perbaikan salah ketik**
-   * Sinkronkan nama variabel gate deviasi: ada ketidakkonsistenan penamaan `THRESHOLD` vs `TRESHOLD` pada jalur proteksi global sehingga perlu standardisasi satu nama.
+   * Rapikan istilah internal terkait news gate menjadi konsisten (misalnya label `High Impact` pada log/UI) agar tidak membingungkan saat audit operasional.
 2. **Perbaikan bug**
-   * Tambahkan validasi startup yang memastikan seluruh path penting (`FITTED_MODELS_PATH`, `FRED_DATA_PATH`, `FORECAST_OUTPUT_PATH`) ada dan dapat dibaca sebelum loop monitor berjalan.
+   * Pastikan parser waktu news menggunakan `timezone` yang benar supaya fitur NEWS tidak gagal saat mengevaluasi jendela blokir.
 3. **Perbaikan komentar/dokumentasi**
-   * Rapikan komentar yang tidak sesuai isi (contoh komentar FRED yang tertukar dengan deskripsi series lain) agar tidak menyesatkan saat maintenance.
+   * Perbarui dokumentasi dashboard agar mencantumkan panel countdown news (`news_status`) sebagai indikator kapan gate aktif/nonaktif.
 4. **Peningkatan pengujian**
-   * Tambahkan unit test untuk fungsi-fungsi kritikal monitor (mis. update RLS, penyesuaian SL/TP dinamis, dan gate entry berdasarkan confidence/deviation).
+   * Tambahkan unit test untuk status gate NEWS (restricted + countdown event berikutnya) agar regresi cepat terdeteksi.
 
 ---
 
