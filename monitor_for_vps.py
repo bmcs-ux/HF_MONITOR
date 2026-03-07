@@ -40,6 +40,48 @@ def convert_numpy_floats(obj):
         return obj
 
 
+def _compute_rls_confidence(maturity: float, pred_variance: float, deviation_norm: float, variance_ref: float) -> float:
+    """Compute smooth confidence score for RLS health, including warm-up cycles."""
+    maturity = float(np.clip(maturity, 0.0, 1.0))
+    variance_ref = max(float(variance_ref), 1e-12)
+    pred_variance = max(float(pred_variance), 1e-12)
+    deviation_norm = max(float(deviation_norm), 0.0)
+
+    normalized_uncertainty = pred_variance / variance_ref
+    warmup_factor = 0.25 + (0.75 * maturity)
+    dev_penalty = np.exp(-0.2 * deviation_norm)
+
+    return float(
+        np.clip(
+            warmup_factor * dev_penalty * np.exp(-parameter.RLS_CONFIDENCE_ALPHA * normalized_uncertainty),
+            0.0,
+            1.0,
+        )
+    )
+
+
+def _summarize_rls_global_metrics(confidence_map: Dict[str, float], maturity_map: Dict[str, float], deviation_map: Dict[str, float]) -> Tuple[float, float]:
+    """Aggregate global confidence/deviation with maturity-aware weighting."""
+    weighted_conf_sum = 0.0
+    weight_sum = 0.0
+
+    for key, confidence in confidence_map.items():
+        maturity = float(np.clip(maturity_map.get(key, 0.0), 0.0, 1.0))
+        if not np.isfinite(confidence) or maturity <= 0:
+            continue
+        weighted_conf_sum += float(confidence) * maturity
+        weight_sum += maturity
+
+    if weight_sum > 0:
+        global_confidence = weighted_conf_sum / weight_sum
+    else:
+        global_confidence = 0.0
+
+    valid_deviations = [float(v) for v in deviation_map.values() if np.isfinite(v)]
+    global_deviation = float(np.mean(valid_deviations)) if valid_deviations else 0.0
+    return float(global_confidence), float(global_deviation)
+
+
 import parameter
 
 current_script_dir = parameter.ROOT_DIR
@@ -1063,6 +1105,7 @@ def start_realtime_monitoring(
                             'maxlags': lags_used,
                             'rls_update_count': 0,
                             'pred_variance_history': [],
+                            'innovation_history': [],
                             'last_update_bar_timestamp': None,
                             'last_Y_t': None,
                             'timeframe': str(tf_name).upper(),
@@ -1158,6 +1201,7 @@ def start_realtime_monitoring(
             rls_metrics = {}
             parameter_deviations = {}
             confidence_per_group = {}
+            maturity_per_group = {}
             rls_param_deviation_score = 0.0
             dcc_group_metrics = {}
             kalman_metrics = {}
@@ -1253,7 +1297,13 @@ def start_realtime_monitoring(
                     recent_endog_std = 1e-12
 
                 min_innovation_scale = getattr(parameter, "RLS_MIN_INNOVATION_SCALE", 0.5)
-                innovation_threshold = min_innovation_scale * recent_endog_std
+                innovation_history = estimator_data.get("innovation_history", [])
+                if innovation_history:
+                    innovation_ref = float(np.median(innovation_history[-60:]))
+                    innovation_ref = max(innovation_ref, 1e-12)
+                else:
+                    innovation_ref = recent_endog_std
+                innovation_threshold = min_innovation_scale * innovation_ref
                 innovation_norm = float("inf") if last_Y_t is None else float(np.linalg.norm(Y_t - last_Y_t))
 
                 should_update_rls = True
@@ -1280,6 +1330,7 @@ def start_realtime_monitoring(
                     estimator_data["rls_update_count"] += 1
                     estimator_data["last_update_bar_timestamp"] = current_bar_timestamp
                     estimator_data["last_Y_t"] = Y_t.copy()
+                    estimator_data["innovation_history"].append(float(innovation_norm if np.isfinite(innovation_norm) else 0.0))
                 else:
                     updated_theta, updated_P = current_theta, current_P
 
@@ -1290,6 +1341,9 @@ def start_realtime_monitoring(
                 except Exception:
                     pred_variance = float("inf")
 
+                if not np.isfinite(pred_variance):
+                    pred_variance = float(parameter.RLS_INITIAL_P_DIAG)
+
                 pred_variance = max(pred_variance, 1e-12)
                 estimator_data["pred_variance_history"].append(pred_variance)
                 deviation_norm = np.linalg.norm(updated_theta - baseline_theta_ref)
@@ -1298,29 +1352,15 @@ def start_realtime_monitoring(
 
                 maturity = min(1.0, n_rls_updates / min_updates)
 
-                if maturity < 1.0 or len(estimator_data["pred_variance_history"]) < 10:
-                    confidence = 0.0
-                else:
-                   # 1. Gunakan rolling window untuk median (misal 60 data terakhir)
-                    window_size = 60
-                    recent_variance_history = list(estimator_data["pred_variance_history"])[-window_size:]
-                    variance_ref = np.median(recent_variance_history) if recent_variance_history else 1e-12
-
-                    # 2. Hitung ketidakpastian relatif terhadap volatilitas terkini
-                    normalized_uncertainty = pred_variance / (variance_ref + 1e-12)
-
-                    # 3. Hitung penalti deviasi (skor deviasi yang kita perbaiki tadi)
-                    # Jika deviasi sangat tinggi, confidence harus turun secara linear/eksponensial
-                    dev_penalty = np.exp(-0.2 * deviation_norm) # Semakin besar deviasi, semakin kecil multiplier
-
-                    # 4. Gabungkan semuanya
-                    confidence = float(
-                        np.clip(
-                            maturity * dev_penalty * np.exp(-parameter.RLS_CONFIDENCE_ALPHA * normalized_uncertainty),
-                            0.0,
-                            1.0
-                        )
-                    )
+                window_size = 60
+                recent_variance_history = list(estimator_data["pred_variance_history"])[-window_size:]
+                variance_ref = np.median(recent_variance_history) if recent_variance_history else parameter.RLS_INITIAL_P_DIAG
+                confidence = _compute_rls_confidence(
+                    maturity=maturity,
+                    pred_variance=pred_variance,
+                    deviation_norm=deviation_norm,
+                    variance_ref=variance_ref,
+                )
 
                 rls_metrics[estimator_label] = {
                     "confidence": float(confidence),
@@ -1338,9 +1378,11 @@ def start_realtime_monitoring(
                         "pred_var": float(pred_variance)
                     }
                 confidence_per_group[estimator_label] = confidence
+                maturity_per_group[estimator_label] = float(maturity)
                 parameter_deviations[estimator_label] = float(deviation_norm)
                 if timeframe_name == "H1":
                     confidence_per_group[group_name] = confidence
+                    maturity_per_group[group_name] = float(maturity)
                     parameter_deviations[group_name] = float(deviation_norm)
 
                 log_stream.write(
@@ -1352,13 +1394,11 @@ def start_realtime_monitoring(
                 )
                 log_stream.flush()
 
-            if parameter_deviations:
-                all_deviations = list(parameter_deviations.values())
-                rls_param_deviation_score = np.mean(all_deviations)
-                global_rls_confidence = np.mean(list(confidence_per_group.values()))
-            else:
-                rls_param_deviation_score = 0.0
-                global_rls_confidence = 0.0
+            global_rls_confidence, rls_param_deviation_score = _summarize_rls_global_metrics(
+                confidence_map=confidence_per_group,
+                maturity_map=maturity_per_group,
+                deviation_map=parameter_deviations,
+            )
 
             log_stream.write(f"    [INFO] GLOBAL RLS SCORE | Deviation: {rls_param_deviation_score:.4f} | Confidence: {global_rls_confidence:.3f}\n")
             log_stream.flush()
@@ -1378,7 +1418,7 @@ def start_realtime_monitoring(
             if rls_param_deviation_score > parameter.RLS_DEVIATION_CLOSE_ALL_THRESHOLD:
                 log_stream.write(f"\n    [ALERT] RLS parameter deviation ({rls_param_deviation_score:.4f}) exceeds GLOBAL CLOSE ALL threshold ({parameter.RLS_DEVIATION_CLOSE_ALL_THRESHOLD:.4f}). Sending signal to close all open positions.\n")
                 send_signal_to_trade_engine({"signal_id": f"CLOSE_ALL_RISK_{pipeline_run_id_for_monitor}_{cycle_count}", "action": "CLOSE_ALL"}, log_stream)
-                skip_individual_trade_decisions = parameter._RLS_DEVIATION_TRESHOLD
+                skip_individual_trade_decisions = parameter._RLS_DEVIATION_THRESHOLD
                 log_stream.flush()
             else:
                 log_stream.write(f"    [INFO] Global RLS deviation ({rls_param_deviation_score:.4f}) is below CLOSE ALL threshold.\n")
