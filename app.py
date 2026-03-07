@@ -18,6 +18,7 @@ vps_data_store = {
     "kalman_metrics": {},
     "consensus_metrics": {},
     "mean_reversion_candidates": {},
+    "news_status": {},
     "open_trades_summary": [],
     "summary": {"status": "WAITING", "time": "-"},
     "equity_history": [],
@@ -63,6 +64,7 @@ def reset_data():
     vps_data_store["kalman_metrics"].clear()
     vps_data_store["consensus_metrics"].clear()
     vps_data_store["mean_reversion_candidates"].clear()
+    vps_data_store["news_status"].clear()
     vps_data_store["open_trades_summary"].clear()
     vps_data_store["summary"] = {"status": "WAITING", "time": "-"}
     return jsonify({"status": "success"}), 200
@@ -90,6 +92,7 @@ def simulate_monitor_data():
         "kalman_metrics": {"XAU/USD": {"trend": "UP", "innovation_zscore": 1.2}},
         "consensus_metrics": {"XAU/USD": {"consensus_score": 0.72}},
         "mean_reversion_candidates": {},
+        "news_status": {"is_restricted": False, "seconds_to_next_event": 420, "window_minutes": 5, "next_event": {"title": "NFP", "country": "USD", "event_time_utc": "2026-03-06T13:30:00"}},
     }
     _append_log(sample)
     receive_data_internal(sample)
@@ -141,7 +144,7 @@ def receive_data_internal(data: dict):
 
     for key in [
         'trade_signals', 'parameter_deviations', 'global_metrics', 'dcc_metrics',
-        'kalman_metrics', 'consensus_metrics', 'mean_reversion_candidates'
+        'kalman_metrics', 'consensus_metrics', 'mean_reversion_candidates', 'news_status'
     ]:
         new_val = data.get(key)
         if new_val:

@@ -1424,7 +1424,8 @@ def start_realtime_monitoring(
                 log_stream.write(f"    [INFO] Global RLS deviation ({rls_param_deviation_score:.4f}) is below CLOSE ALL threshold.\n")
                 log_stream.flush()
 
-            if news_manager_instance.is_currently_restricted():
+            news_status = news_manager_instance.get_news_status()
+            if news_status.get("is_restricted"):
                 skip_individual_trade_decisions = parameter.NEWS
                 log_stream.write(f"    [WARN] News restriction detected. Setting skip_individual_trade_decisions to True.\n")
                 log_stream.flush()
@@ -1603,7 +1604,7 @@ def start_realtime_monitoring(
                     reasons.append(f"Low Confidence ({global_rls_confidence:.4f})")
                 if rls_param_deviation_score > parameter.RLS_DEVIATION_CLOSE_ALL_THRESHOLD:
                     reasons.append(f"High Deviation ({rls_param_deviation_score:.4f})")
-                if news_manager_instance.is_currently_restricted():
+                if news_status.get("is_restricted"):
                     reasons.append("News Restriction")
 
                 reason_str = ", ".join(reasons) if reasons else "Unknown Safety Filter"
@@ -1647,6 +1648,7 @@ def start_realtime_monitoring(
                 "mean_reversion_candidates": convert_numpy_floats(mean_reversion_candidates),
                 "pipeline_run_id": pipeline_run_id_for_monitor,
                 "cycle_duration_seconds": float(time.time() - cycle_start_time),
+                "news_status": convert_numpy_floats(news_status),
                 "log_summary": f"Completed cycle {cycle_count}. Price deviation for {sum(1 for r in deviation_results.values() if r['ci_breach'])} pairs. Trade signals generated for {sum(1 for s in trade_signals.values() if s['signal'] != 'HOLD')} pairs."
             }
 
