@@ -103,10 +103,10 @@ RLS_DEVIATION_THRESHOLD = 6.90 # NEW: Threshold for RLS parameter deviation.
 RLS_DEVIATION_CLOSE_ALL_THRESHOLD = 7.1 # NEW: Threshold to trigger closing all positions
 
 # NEW parameters for dynamic SL/TP adjustment based on RLS parameter deviation
-RLS_SCALING_FACTOR_SL = 0.15 # Scales the increase in k_atr_stop and k_model_stop
+RLS_SCALING_FACTOR_SL = 0.25 # Scales the increase in k_atr_stop and k_model_stop
 RLS_SCALING_FACTOR_TP = 0.35 # Scales the reduction in tp_rr_ratio
 RLS_SNR_INCREASE_FACTOR = 0.05 # Scales the increase in snr_threshold
-RLS_TP_RR_MIN = 0.4 # Minimum acceptable tp_rr_ratio
+RLS_TP_RR_MIN = 0.45 # Minimum acceptable tp_rr_ratio
 RLS_SL_MAX_MULTIPLIER = 2.2 # Maximum allowed multiplier for k_atr_stop and k_model_stop
 
 
@@ -123,8 +123,8 @@ MAGIC_NUMBER = 202401
 # Trade management
 EQUITY = 1000
 RISK_PER_TRADE_PCT = 0.1
-K_ATR_STOP = 2.0
-K_MODEL_STOP = 1.2
+K_ATR_STOP = 2.2
+K_MODEL_STOP = 1.5
 SNR_THRESHOLD = 0.6
 TP_RR_RATIO = 1.5
 
@@ -142,7 +142,7 @@ CONSENSUS_THRESHOLD = 0.75
 
 # DCC proxy controls (contagion -> wider risk envelope)
 DCC_RISK_MULTIPLIER = 0.7
-DCC_FLIP_EPS_MULTIPLIER = 0.5
+DCC_FLIP_EPS_MULTIPLIER = 0.2
 
 # Mean reversion monitor gates
 MEAN_REVERSION_HIGH_Z = 1.5
@@ -156,4 +156,4 @@ KALMAN_R = [[0.000001]]
 KALMAN_INITIAL_STATE = [1.0, 0.0]
 KALMAN_INITIAL_P = [[0.1, 0.0], [0.0, 0.1]]
 KALMAN_ZSCORE_WINDOW = 120
-KALMAN_FLIP_ZSCORE = 3.0
+KALMAN_FLIP_ZSCORE = 1.0
