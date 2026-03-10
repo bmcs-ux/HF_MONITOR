@@ -632,11 +632,12 @@ def decide_trade(
     # 2. Kalman Trigger: arah entry ditentukan oleh velocity + innovation z-score.
     kalman_velocity_threshold = float(getattr(parameter, "KALMAN_VELOCITY_THRESHOLD", 1e-6))
     kalman_entry_zscore = float(getattr(parameter, "KALMAN_ENTRY_ZSCORE", 0.25))
-    if abs(kalman_velocity) < kalman_velocity_threshold or abs(kalman_innovation_zscore) < kalman_entry_zscore:
-        trade_decision['reason'] = (
-            f'Kalman trigger not met (|vel|={abs(kalman_velocity):.3e}, '
-            f'|z|={abs(kalman_innovation_zscore):.2f})'
-        )
+    vel_ratio = abs(kalman_velocity) / kalman_velocity_threshold
+    z_ratio = abs(kalman_innovation_zscore) / kalman_entry_zscore
+
+    # Jika salah satu sangat kuat (misal 2x lipat threshold), kita anggap valid.
+    if (vel_ratio + z_ratio) < 1.5:
+        trade_decision['reason'] = f'Combined Kalman Trigger Weak ({vel_ratio + z_ratio:.2f})'
         return trade_decision
 
     # 3. Cek Stabilitas RLS

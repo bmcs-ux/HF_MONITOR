@@ -106,7 +106,7 @@ RLS_DEVIATION_CLOSE_ALL_THRESHOLD = 7.1 # NEW: Threshold to trigger closing all 
 RLS_SCALING_FACTOR_SL = 0.25 # Scales the increase in k_atr_stop and k_model_stop
 RLS_SCALING_FACTOR_TP = 0.35 # Scales the reduction in tp_rr_ratio
 RLS_SNR_INCREASE_FACTOR = 0.05 # Scales the increase in snr_threshold
-RLS_TP_RR_MIN = 0.45 # Minimum acceptable tp_rr_ratio
+RLS_TP_RR_MIN = 0.1 # Minimum acceptable tp_rr_ratio
 RLS_SL_MAX_MULTIPLIER = 2.2 # Maximum allowed multiplier for k_atr_stop and k_model_stop
 
 
@@ -123,9 +123,9 @@ MAGIC_NUMBER = 202401
 # Trade management
 EQUITY = 1000
 RISK_PER_TRADE_PCT = 0.1
-K_ATR_STOP = 2.2
+K_ATR_STOP = 1.8
 K_MODEL_STOP = 1.5
-SNR_THRESHOLD = 0.6
+SNR_THRESHOLD = 0.1
 TP_RR_RATIO = 1.5
 
 # Adaptive safeguards for mixed-timeframe RLS monitoring
@@ -152,7 +152,7 @@ MEAN_REVERSION_LOW_VOL_PREDVAR = 0.002
 KALMAN_F = [[1, 1], [0, 1]]
 KALMAN_H = [[1, 0]]
 KALMAN_Q = [[0.0001, 0.0], [0.0, 0.0001]]
-KALMAN_R = [[0.000001]]
+KALMAN_R = [[0.001]]
 KALMAN_INITIAL_STATE = [1.0, 0.0]
 KALMAN_INITIAL_P = [[0.1, 0.0], [0.0, 0.1]]
 KALMAN_ZSCORE_WINDOW = 120
