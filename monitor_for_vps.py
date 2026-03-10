@@ -82,6 +82,18 @@ def _summarize_rls_global_metrics(confidence_map: Dict[str, float], maturity_map
     return float(global_confidence), float(global_deviation)
 
 
+def _resolve_pair_pred_variance(rls_metrics: Dict[str, Dict[str, float]], pair_group: str, timeframe: str = "H1") -> float:
+    """Resolve pair/group prediction variance with timeframe fallback."""
+    tf_group_key = f"{str(timeframe).upper()}::{pair_group}"
+
+    for key in (pair_group, tf_group_key):
+        pred_var = float(rls_metrics.get(key, {}).get("pred_var", float("nan")))
+        if np.isfinite(pred_var):
+            return pred_var
+
+    return float("inf")
+
+
 import parameter
 
 current_script_dir = parameter.ROOT_DIR
@@ -1589,7 +1601,7 @@ def start_realtime_monitoring(
                         "kalman_z": float(kalman_result["innovation_zscore"])
                     }
 
-                    pair_pred_var = float(rls_metrics.get(pair_group, {}).get("pred_var", float("inf")))
+                    pair_pred_var = _resolve_pair_pred_variance(rls_metrics, pair_group, timeframe="H1")
                     pred_var_gate = float(getattr(parameter, "RLS_MAX_PRED_VARIANCE_FOR_ENTRY", 25.0))
                     if signal.get("signal") in ("BUY", "SELL") and (rls_expected_return <= 0 or pair_pred_var >= pred_var_gate):
                         signal["signal"] = "HOLD"
