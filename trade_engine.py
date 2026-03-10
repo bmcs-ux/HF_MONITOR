@@ -488,11 +488,11 @@ class TradeEngine:
             return json.dumps(status_update, default=str)
 
         pair_name = signal.get('pair_name') or signal.get("symbol")
-        blocked_pairs = getattr(parameter, 'BLOK_SIGNAL_FOR', set())
+        blocked_pairs = getattr(parameter, 'BLOCK_SIGNAL_FOR', getattr(parameter, 'BLOK_SIGNAL_FOR', set()))
         if pair_name in blocked_pairs:
             self._log(f"[BLOCK] Signal for {pair_name} is BLOCKED based on parameter settings.")
             status_update["status"] = "blocked"
-            status_update["message"] = f"Trading for {pair_name} is disabled in BLOK_SIGNAL_FOR"
+            status_update["message"] = f"Trading for {pair_name} is disabled in BLOCK_SIGNAL_FOR"
 
             # Kirim info ke Colab agar monitor tahu sinyal diblokir
             send_trade_data_to_colab({

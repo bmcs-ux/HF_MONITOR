@@ -60,7 +60,8 @@ VARX_ENDOG_GROUPS = {
     'Risk': ['US500_Close_Log_Return', 'DXY_Close_Log_Return'],
 }
 
-BLOK_SIGNAL_FOR = {"US500", "US30","USD/DXY", "USD/CAD","EUR/USD","XCU/USD","XPB/USD"}  # Masukkan nama pair yang ingin diblokir
+BLOCK_SIGNAL_FOR = {"US500", "US30", "USD/DXY", "USD/CAD", "EUR/USD", "XCU/USD", "XPB/USD"}  # Daftar pair yang diblokir
+BLOK_SIGNAL_FOR = BLOCK_SIGNAL_FOR  # Backward compatibility
 # Note: yfinance intervals use strings like '1m','5m','15m','60m'. We will resample using pandas offsets.
 
 # Granger params
@@ -117,6 +118,9 @@ RLS_MIN_UPDATES_FOR_CONFIDENCE = 40
 RLS_CONFIDENCE_ALPHA = 0.4
 # Entry gate
 RLS_CONFIDENCE_ENTRY_THRESHOLD = 0.40
+
+# Hard upper bound for model uncertainty at entry confirmation
+RLS_MAX_PRED_VARIANCE_FOR_ENTRY = 25.0
 
 MAGIC_NUMBER = 202401
 
