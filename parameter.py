@@ -107,7 +107,7 @@ RLS_DEVIATION_CLOSE_ALL_THRESHOLD = 7.1 # NEW: Threshold to trigger closing all 
 RLS_SCALING_FACTOR_SL = 0.25 # Scales the increase in k_atr_stop and k_model_stop
 RLS_SCALING_FACTOR_TP = 0.35 # Scales the reduction in tp_rr_ratio
 RLS_SNR_INCREASE_FACTOR = 0.05 # Scales the increase in snr_threshold
-RLS_TP_RR_MIN = 0.1 # Minimum acceptable tp_rr_ratio
+RLS_TP_RR_MIN = 0.3 # Minimum acceptable tp_rr_ratio
 RLS_SL_MAX_MULTIPLIER = 2.2 # Maximum allowed multiplier for k_atr_stop and k_model_stop
 
 
