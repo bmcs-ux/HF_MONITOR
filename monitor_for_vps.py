@@ -94,6 +94,41 @@ def _resolve_pair_pred_variance(rls_metrics: Dict[str, Dict[str, float]], pair_g
     return float("inf")
 
 
+def _compute_dynamic_position_tp(
+    is_buy: bool,
+    latest_actual_price: float,
+    entry_price: float,
+    sl_dist: float,
+    kalman_result: Dict[str, Any],
+    pair_rls_deviation: float,
+) -> float:
+    """Hitung TP modifikasi posisi dengan guard RR minimum + arah entry.
+
+    Tujuan:
+    - TP tidak terlalu dekat dengan harga saat ini (noise stop-out).
+    - TP tidak berada di sisi merugikan terhadap harga entry (BUY di bawah entry / SELL di atas entry).
+    """
+    kalman_projected_tp = float(kalman_result.get("filtered_price", latest_actual_price)) + float(
+        kalman_result.get("velocity", 0.0)
+    )
+    kalman_projected_tp = max(kalman_projected_tp, 1e-6)
+
+    raw_tp = max(kalman_projected_tp, latest_actual_price) if is_buy else min(kalman_projected_tp, latest_actual_price)
+
+    tp_rr_ratio = float(getattr(parameter, "TP_RR_RATIO", 1.0))
+    tp_red_factor = 1 - (float(pair_rls_deviation) * float(getattr(parameter, "RLS_SCALING_FACTOR_TP", 0.0)))
+    tp_rr_floor = float(getattr(parameter, "RLS_TP_RR_MIN", 0.3))
+    tp_rr_adj = max(tp_rr_floor, tp_rr_ratio * tp_red_factor)
+    min_target_dist = max(abs(float(sl_dist)) * tp_rr_adj, 1e-6)
+
+    if is_buy:
+        tp_floor = max(float(latest_actual_price), float(entry_price)) + min_target_dist
+        return max(raw_tp, tp_floor)
+
+    tp_ceiling = min(float(latest_actual_price), float(entry_price)) - min_target_dist
+    return max(min(raw_tp, tp_ceiling), 1e-6)
+
+
 import parameter
 
 current_script_dir = parameter.ROOT_DIR
@@ -238,7 +273,7 @@ def _build_regressor_matrix(log_stream, current_hf_combined_log_returns_df, late
         normalized_exog_name = str(exog_name).replace('_Transformed', '').replace('_FinalTransformed', '')
         # Cek di FRED Exog
         if exog_name in latest_hf_fred_exog_df.columns:
-            # PERBAIKAN DISINI: Gunakan .iloc[0] untuk menghindari KeyError pada DatetimeIndex
+            # PERBAIKAN DI SINI: Gunakan .iloc[0] untuk menghindari KeyError pada DatetimeIndex
             val = latest_hf_fred_exog_df[exog_name].iloc[0]
             
         elif exog_name in current_hf_combined_log_returns_df.columns:
@@ -1755,7 +1790,7 @@ def start_realtime_monitoring(
                         # Estimasi Volatilitas model + update Kalman untuk manajemen posisi.
                         forecast_std = _estimate_forecast_std(mapped_pair_name, latest_actual_price, confidence_level, kalman_metrics)
 
-                        # 4. Logika Exit Early berbasis Kalman flip (menggantikan RLS flip).
+                        # 4. Logika Exit early berbasis Kalman flip (menggantikan RLS flip).
                         pair_group = PAIR_TO_RLS_GROUP.get(mapped_pair_name)
                         dcc_score = dcc_group_metrics.get(pair_group, {}).get("contagion_score", 0.0)
                         # Clamp multiplier agar threshold flip tidak lebih sensitif dari baseline.
@@ -1800,9 +1835,15 @@ def start_realtime_monitoring(
 
                         # 6. Kalkulasi Target SL/TP Baru
                         sl_dist = max(k_atr_stop_adj * hf_atr, k_model_stop_adj * forecast_std)
-                        kalman_projected_tp = float(kalman_result.get("filtered_price", latest_actual_price)) + float(kalman_result.get("velocity", 0.0))
-                        kalman_projected_tp = max(kalman_projected_tp, 1e-6)
-                        new_tp = max(kalman_projected_tp, latest_actual_price) if is_buy else min(kalman_projected_tp, latest_actual_price)  # Target profit dinamis dari Kalman
+                        entry_price = float(getattr(pos, "price_open", latest_actual_price) or latest_actual_price)
+                        new_tp = _compute_dynamic_position_tp(
+                            is_buy=is_buy,
+                            latest_actual_price=float(latest_actual_price),
+                            entry_price=entry_price,
+                            sl_dist=float(sl_dist),
+                            kalman_result=kalman_result,
+                            pair_rls_deviation=float(pair_rls_deviation),
+                        )  # TP dinamis Kalman + guard RR minimum + guard posisi vs entry
 
                         if is_buy:
                             target_sl = latest_actual_price - sl_dist
