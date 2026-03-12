@@ -713,28 +713,31 @@ def decide_trade(
 
     sl_dist = abs(sl_dist)
     
-    # Hitung Jarak Prediksi (Target Move) dalam satuan Price
-    # Jarak dari harga saat ini ke predicted_mean
-    prediction_dist = abs(predicted_mean - latest_actual_price)
-    
-    realized_rr = prediction_dist / sl_dist if sl_dist > 0 else 0
+    # Hitung Jarak Prediksi (Target Move) dalam satuan price.
+    # Bila predicted_mean terlalu dekat/berlawanan arah dengan arah entry Kalman,
+    # pakai minimal target berbasis RR agar TP tidak terlalu sempit.
+    signed_prediction_move = (predicted_mean - latest_actual_price) * direction
+    prediction_dist = max(signed_prediction_move, 0.0)
+    min_target_dist = sl_dist * tp_rr_adj
+    effective_target_dist = max(prediction_dist, min_target_dist)
+
+    realized_rr = effective_target_dist / sl_dist if sl_dist > 0 else 0
     trade_decision['rr_ratio'] = realized_rr
     # FILTER KRUSIAL: Jika target keuntungan lebih kecil dari risiko, jangan masuk.
     # Batas minimal 0.8 atau 1.0 agar masuk akal setelah spread.
-    
-    if realized_rr < parameter.RLS_TP_RR_MIN:
+
+    if realized_rr < tp_rr_adj:
         trade_decision['signal'] = 'HOLD'
-        trade_decision['reason'] = f'Bad RR Ratio ({realized_rr:.2f} < {parameter.RLS_TP_RR_MIN})'
-        log_stream.write(f"    [INFO] {pair_name}: {trade_decision['reason']} (Target: {prediction_dist:.2f}, SL Dist: {sl_dist:.2f})\n")
+        trade_decision['reason'] = f'Bad RR Ratio ({realized_rr:.2f} < {tp_rr_adj:.2f})'
+        log_stream.write(f"    [INFO] {pair_name}: {trade_decision['reason']} (Target: {effective_target_dist:.2f}, SL Dist: {sl_dist:.2f})\n")
         return trade_decision
 
     if direction == 1: # BUY
-        # Take Profit sekarang menggunakan nilai Prediksi Mean
-        # Kita bisa tambahkan sedikit buffer atau multiplier jika ingin lebih agresif
-        tp_price = predicted_mean 
+        # TP mengikuti target efektif (model atau RR minimum, mana yang lebih jauh).
+        tp_price = latest_actual_price + effective_target_dist
         sl_price = latest_actual_price - sl_dist
     else: # SELL
-        tp_price = predicted_mean
+        tp_price = latest_actual_price - effective_target_dist
         sl_price = latest_actual_price + sl_dist
 
     # Hitung Realized RR Ratio (Penting untuk log dan monitoring)
@@ -746,7 +749,7 @@ def decide_trade(
     max_risk_usd = equity * risk_pct
     raw_units = max_risk_usd / sl_dist
     
-    # Apply caps (Contoh: Max 0.02, Min 0.01)
+    # Apply caps (Saat ini hard cap = 0.01 lot; di bawah 0.01 tidak dieksekusi)
     position_units = max(0.0, min(raw_units, 0.01))
     if position_units < 0.01:
         position_units = 0.0
@@ -1755,7 +1758,8 @@ def start_realtime_monitoring(
                         # 4. Logika Exit Early berbasis Kalman flip (menggantikan RLS flip).
                         pair_group = PAIR_TO_RLS_GROUP.get(mapped_pair_name)
                         dcc_score = dcc_group_metrics.get(pair_group, {}).get("contagion_score", 0.0)
-                        dcc_flip_multiplier = 1 + (dcc_score * float(getattr(parameter, "DCC_FLIP_EPS_MULTIPLIER", 0.5)))
+                        # Clamp multiplier agar threshold flip tidak lebih sensitif dari baseline.
+                        dcc_flip_multiplier = max(1.0, 1 + (dcc_score * float(getattr(parameter, "DCC_FLIP_EPS_MULTIPLIER", 0.5))))
 
                         kalman_result = _run_kalman_filter_step(mapped_pair_name, latest_actual_price)
                         kalman_metrics[mapped_pair_name] = kalman_result

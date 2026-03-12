@@ -30,6 +30,15 @@ class TestRLSHealthLogicSource(unittest.TestCase):
         self.assertIn('kalman_entry_zscore = float(getattr(parameter, "KALMAN_ENTRY_ZSCORE", 0.25))', self.source)
         self.assertIn('RLS confirmation failed (ret=', self.source)
 
+
+    def test_trade_target_uses_min_rr_floor_when_model_target_too_close(self):
+        self.assertIn('signed_prediction_move = (predicted_mean - latest_actual_price) * direction', self.source)
+        self.assertIn('effective_target_dist = max(prediction_dist, min_target_dist)', self.source)
+        self.assertIn("if realized_rr < tp_rr_adj:", self.source)
+
+    def test_dcc_flip_multiplier_is_clamped_to_avoid_over_sensitive_flip(self):
+        self.assertIn('dcc_flip_multiplier = max(1.0, 1 + (dcc_score * float(getattr(parameter, "DCC_FLIP_EPS_MULTIPLIER", 0.5))))', self.source)
+
     def test_position_modification_uses_kalman_flip_not_rls_flip(self):
         self.assertIn('close_due_to_kalman_flip', self.source)
         self.assertIn('Kalman Flip z=', self.source)
