@@ -122,6 +122,14 @@ RLS_CONFIDENCE_ENTRY_THRESHOLD = 0.40
 # Hard upper bound for model uncertainty at entry confirmation
 RLS_MAX_PRED_VARIANCE_FOR_ENTRY = 25.0
 
+# Cycle-to-cycle stabilizer for RLS expected return confirmation.
+# Lower alpha = smoother and less reactive to transient flips.
+RLS_RETURN_EMA_ALPHA = 0.35
+# Neutral zone to prevent flip-flop around zero return.
+RLS_RETURN_DEADBAND = 5e-5
+# Minimum absolute return needed to confirm BUY/SELL direction.
+RLS_RETURN_DIRECTION_EPSILON = 1e-5
+
 MAGIC_NUMBER = 202401
 
 # Trade management

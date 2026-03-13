@@ -94,6 +94,31 @@ def _resolve_pair_pred_variance(rls_metrics: Dict[str, Dict[str, float]], pair_g
     return float("inf")
 
 
+def _stabilize_expected_return(raw_expected_return: float, previous_expected_return: float) -> float:
+    """Reduce cycle-to-cycle noise in expected return using EMA + deadband."""
+    raw = float(raw_expected_return)
+    prev = float(previous_expected_return)
+    alpha = float(np.clip(getattr(parameter, "RLS_RETURN_EMA_ALPHA", 0.35), 0.0, 1.0))
+    deadband = max(float(getattr(parameter, "RLS_RETURN_DEADBAND", 5e-5)), 0.0)
+
+    smoothed = (alpha * raw) + ((1.0 - alpha) * prev)
+    if abs(smoothed) < deadband:
+        return 0.0
+    return float(smoothed)
+
+
+def _passes_rls_directional_confirmation(signal_side: str, expected_return: float) -> bool:
+    """Direction-aware confirmation for BUY/SELL signal validation."""
+    eps = max(float(getattr(parameter, "RLS_RETURN_DIRECTION_EPSILON", 0.0)), 0.0)
+    expected_return = float(expected_return)
+
+    if signal_side == "BUY":
+        return expected_return > eps
+    if signal_side == "SELL":
+        return expected_return < -eps
+    return True
+
+
 def _compute_dynamic_position_tp(
     is_buy: bool,
     latest_actual_price: float,
@@ -983,6 +1008,7 @@ def start_realtime_monitoring(
     start_time = time.time()
     end_time = start_time + total_duration_minutes * 60
     cycle_count = 0
+    expected_return_state: Dict[str, float] = {}
 
     if log_output_path:
         log_stream_main = open(log_output_path, 'a')
@@ -1526,7 +1552,7 @@ def start_realtime_monitoring(
                         }
                         continue
 
-                    rls_expected_return = infer_rls_expected_return(
+                    raw_rls_expected_return = infer_rls_expected_return(
                         log_stream=log_stream,
                         pair_name=pair_name, # Fungsi akan mencari group & index sendiri
                         rls_estimators=rls_estimators,
@@ -1535,9 +1561,16 @@ def start_realtime_monitoring(
                         lagged_hf_log_returns_df=lagged_hf_log_returns_df
                     )
 
-                    if rls_expected_return is None:
+                    if raw_rls_expected_return is None:
                         trade_signals[pair_name] = {"signal": "HOLD", "reason": "RLS unavailable"}
                         continue
+
+                    prev_expected_return = expected_return_state.get(pair_name, float(raw_rls_expected_return))
+                    rls_expected_return = _stabilize_expected_return(
+                        raw_expected_return=float(raw_rls_expected_return),
+                        previous_expected_return=prev_expected_return,
+                    )
+                    expected_return_state[pair_name] = float(rls_expected_return)
 
                     predicted_mean = latest_hf_actual_prices[pair_name] * np.exp(rls_expected_return)
                     forecast_std = _estimate_forecast_std(pair_name, latest_hf_actual_prices[pair_name], confidence_level, kalman_metrics)
@@ -1641,11 +1674,16 @@ def start_realtime_monitoring(
 
                     pair_pred_var = _resolve_pair_pred_variance(rls_metrics, pair_group, timeframe="H1")
                     pred_var_gate = float(getattr(parameter, "RLS_MAX_PRED_VARIANCE_FOR_ENTRY", 25.0))
-                    if signal.get("signal") in ("BUY", "SELL") and (rls_expected_return <= 0 or pair_pred_var >= pred_var_gate):
-                        signal["signal"] = "HOLD"
-                        signal["reason"] = (
-                            f"RLS confirmation failed (ret={rls_expected_return:.3e}, pred_var={pair_pred_var:.3e})"
-                        )
+                    if signal.get("signal") in ("BUY", "SELL"):
+                        direction_ok = _passes_rls_directional_confirmation(signal.get("signal", "HOLD"), rls_expected_return)
+                        variance_ok = pair_pred_var < pred_var_gate
+                        if not (direction_ok and variance_ok):
+                            signal["signal"] = "HOLD"
+                            signal["reason"] = (
+                                f"RLS confirmation failed (raw_ret={float(raw_rls_expected_return):.3e}, "
+                                f"ret={rls_expected_return:.3e}, pred_var={pair_pred_var:.3e}, "
+                                f"dir_ok={int(direction_ok)}, var_ok={int(variance_ok)})"
+                            )
 
                     if signal.get("signal") == "BUY":
                         if not (consensus_score >= consensus_threshold and kalman_result["trend"] == "UP"):
