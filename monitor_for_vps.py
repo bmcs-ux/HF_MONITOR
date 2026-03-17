@@ -196,7 +196,7 @@ KALMAN_MODEL_PARAMS = {}
 def _extract_ensemble_payload(loaded_payload: dict) -> dict:
     """Normalisasi payload model yang dimuat dari pickle.
 
-    Mendukung beberapa format:
+    Mendukung beberapa format payload model:
     - {"data": {...}} (legacy)
     - {"ensemble": {...}, "dcc_garch": {...}} (fitted_ensemble.pkl)
     - mapping grup langsung (legacy flat)
@@ -226,6 +226,39 @@ def _resolve_timeframe_seconds(tf_name: str) -> Optional[int]:
         "D1": 86400,
     }
     return mapping.get(str(tf_name).upper())
+
+
+def _compute_contagion_score_from_covariance(
+    covariance_matrix: np.ndarray,
+    covariance_series_names: Optional[list],
+    target_series_names: Optional[list],
+) -> float:
+    """Hitung contagion score dari covariance forecast DCC.
+
+    Jika nama seri tersedia, metrik dihitung hanya untuk sub-matriks `target_series_names`
+    agar skor per-group tidak tercampur dengan seri dari group lain.
+    """
+    if covariance_matrix is None:
+        return 0.0
+
+    matrix = np.asarray(covariance_matrix, dtype=float)
+    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1] or matrix.shape[0] < 2:
+        return 0.0
+
+    if covariance_series_names and target_series_names:
+        idx_map = {name: idx for idx, name in enumerate(covariance_series_names)}
+        selected_idx = [idx_map[name] for name in target_series_names if name in idx_map]
+        if len(selected_idx) >= 2:
+            matrix = matrix[np.ix_(selected_idx, selected_idx)]
+
+    std = np.sqrt(np.diag(matrix))
+    denom = np.outer(std, std)
+    corr_matrix = np.divide(matrix, denom, out=np.zeros_like(matrix), where=denom > 0)
+    upper = np.triu(np.abs(corr_matrix), k=1)
+    non_zero = upper[upper > 0]
+    if non_zero.size == 0:
+        return 0.0
+    return float(np.clip(float(np.mean(non_zero)), 0.0, 1.0))
 
 
 def _timeframe_close_marker(tf_name: str, current_ts):
@@ -1328,16 +1361,22 @@ def start_realtime_monitoring(
 
                 try:
                     dcc_model = dcc_model_registry.get(timeframe_name)
-                    if dcc_model is not None and _is_new_timeframe_close(timeframe_name, hf_combined_log_returns_df.index[-1], dcc_timeframe_last_close_map):
+                    cache_key = f"{timeframe_name}::{group_name}"
+                    if dcc_model is not None and _is_new_timeframe_close(
+                        timeframe_name,
+                        hf_combined_log_returns_df.index[-1],
+                        dcc_timeframe_last_close_map,
+                        marker_key=cache_key,
+                    ):
                         H_next = dcc_model.forecast(horizon=1)
-                        std = np.sqrt(np.diag(H_next))
-                        denom = np.outer(std, std)
-                        corr_matrix = np.divide(H_next, denom, out=np.zeros_like(H_next), where=denom > 0)
-                        upper = np.triu(np.abs(corr_matrix), k=1)
-                        non_zero = upper[upper > 0]
-                        contagion_score = float(np.mean(non_zero)) if non_zero.size else 0.0
-                        dcc_metrics_cache[timeframe_name] = {"contagion_score": float(np.clip(contagion_score, 0.0, 1.0))}
-                    contagion_score = dcc_metrics_cache.get(timeframe_name, {}).get("contagion_score", 0.0)
+                        dcc_metrics_cache[cache_key] = {
+                            "contagion_score": _compute_contagion_score_from_covariance(
+                                H_next,
+                                getattr(dcc_model, "column_names", None),
+                                endog_names_group,
+                            )
+                        }
+                    contagion_score = dcc_metrics_cache.get(cache_key, {}).get("contagion_score", 0.0)
                 except Exception:
                     try:
                         group_returns_for_corr = hf_combined_log_returns_df[endog_names_group].tail(volatility_window)
