@@ -82,6 +82,78 @@ def _summarize_rls_global_metrics(confidence_map: Dict[str, float], maturity_map
     return float(global_confidence), float(global_deviation)
 
 
+def _resolve_pair_pred_variance(rls_metrics: Dict[str, Dict[str, float]], pair_group: str, timeframe: str = "H1") -> float:
+    """Resolve pair/group prediction variance with timeframe fallback."""
+    tf_group_key = f"{str(timeframe).upper()}::{pair_group}"
+
+    for key in (pair_group, tf_group_key):
+        pred_var = float(rls_metrics.get(key, {}).get("pred_var", float("nan")))
+        if np.isfinite(pred_var):
+            return pred_var
+
+    return float("inf")
+
+
+def _stabilize_expected_return(raw_expected_return: float, previous_expected_return: float) -> float:
+    """Reduce cycle-to-cycle noise in expected return using EMA + deadband."""
+    raw = float(raw_expected_return)
+    prev = float(previous_expected_return)
+    alpha = float(np.clip(getattr(parameter, "RLS_RETURN_EMA_ALPHA", 0.35), 0.0, 1.0))
+    deadband = max(float(getattr(parameter, "RLS_RETURN_DEADBAND", 5e-5)), 0.0)
+
+    smoothed = (alpha * raw) + ((1.0 - alpha) * prev)
+    if abs(smoothed) < deadband:
+        return 0.0
+    return float(smoothed)
+
+
+def _passes_rls_directional_confirmation(signal_side: str, expected_return: float) -> bool:
+    """Direction-aware confirmation for BUY/SELL signal validation."""
+    eps = max(float(getattr(parameter, "RLS_RETURN_DIRECTION_EPSILON", 0.0)), 0.0)
+    expected_return = float(expected_return)
+
+    if signal_side == "BUY":
+        return expected_return > eps
+    if signal_side == "SELL":
+        return expected_return < -eps
+    return True
+
+
+def _compute_dynamic_position_tp(
+    is_buy: bool,
+    latest_actual_price: float,
+    entry_price: float,
+    sl_dist: float,
+    kalman_result: Dict[str, Any],
+    pair_rls_deviation: float,
+) -> float:
+    """Hitung TP modifikasi posisi dengan guard RR minimum + arah entry.
+
+    Tujuan:
+    - TP tidak terlalu dekat dengan harga saat ini (noise stop-out).
+    - TP tidak berada di sisi merugikan terhadap harga entry (BUY di bawah entry / SELL di atas entry).
+    """
+    kalman_projected_tp = float(kalman_result.get("filtered_price", latest_actual_price)) + float(
+        kalman_result.get("velocity", 0.0)
+    )
+    kalman_projected_tp = max(kalman_projected_tp, 1e-6)
+
+    raw_tp = max(kalman_projected_tp, latest_actual_price) if is_buy else min(kalman_projected_tp, latest_actual_price)
+
+    tp_rr_ratio = float(getattr(parameter, "TP_RR_RATIO", 1.0))
+    tp_red_factor = 1 - (float(pair_rls_deviation) * float(getattr(parameter, "RLS_SCALING_FACTOR_TP", 0.0)))
+    tp_rr_floor = float(getattr(parameter, "RLS_TP_RR_MIN", 0.3))
+    tp_rr_adj = max(tp_rr_floor, tp_rr_ratio * tp_red_factor)
+    min_target_dist = max(abs(float(sl_dist)) * tp_rr_adj, 1e-6)
+
+    if is_buy:
+        tp_floor = max(float(latest_actual_price), float(entry_price)) + min_target_dist
+        return max(raw_tp, tp_floor)
+
+    tp_ceiling = min(float(latest_actual_price), float(entry_price)) - min_target_dist
+    return max(min(raw_tp, tp_ceiling), 1e-6)
+
+
 import parameter
 
 current_script_dir = parameter.ROOT_DIR
@@ -169,17 +241,23 @@ def _timeframe_close_marker(tf_name: str, current_ts):
     return pd.Timestamp(int(ts.timestamp() // sec * sec), unit="s", tz=ts.tz)
 
 
-def _is_new_timeframe_close(tf_name: str, current_ts, last_seen_map: Dict[str, Any]) -> bool:
-    """True jika candle timeframe tf_name sudah close baru dibanding siklus sebelumnya."""
+def _is_new_timeframe_close(
+    tf_name: str,
+    current_ts,
+    last_seen_map: Dict[str, Any],
+    marker_key: Optional[str] = None,
+) -> bool:
+    """True jika marker candle baru untuk key tertentu sudah close dibanding siklus sebelumnya."""
     marker = _timeframe_close_marker(tf_name, current_ts)
     if marker is None:
         return False
-    previous_ts = last_seen_map.get(tf_name)
+    key = marker_key or tf_name
+    previous_ts = last_seen_map.get(key)
     if previous_ts is None:
-        last_seen_map[tf_name] = marker
+        last_seen_map[key] = marker
         return True
     if marker > previous_ts:
-        last_seen_map[tf_name] = marker
+        last_seen_map[key] = marker
         return True
     return False
 
@@ -220,7 +298,7 @@ def _build_regressor_matrix(log_stream, current_hf_combined_log_returns_df, late
         normalized_exog_name = str(exog_name).replace('_Transformed', '').replace('_FinalTransformed', '')
         # Cek di FRED Exog
         if exog_name in latest_hf_fred_exog_df.columns:
-            # PERBAIKAN DISINI: Gunakan .iloc[0] untuk menghindari KeyError pada DatetimeIndex
+            # PERBAIKAN DI SINI: Gunakan .iloc[0] untuk menghindari KeyError pada DatetimeIndex
             val = latest_hf_fred_exog_df[exog_name].iloc[0]
             
         elif exog_name in current_hf_combined_log_returns_df.columns:
@@ -592,7 +670,7 @@ def decide_trade(
     latest_actual_price, 
     expected_return,  # Ini adalah predicted move (log return)
     forecast_std,     # satuan price!
-    forecast_std_return, # versi satuan Log retrun dari forecast_std
+    forecast_std_return, # versi satuan log return dari forecast_std
     hf_atr, 
     equity, 
     risk_pct, 
@@ -601,7 +679,10 @@ def decide_trade(
     snr_threshold, 
     rls_param_deviation_score, 
     rls_deviation_threshold, 
-    tp_rr_ratio=1.5
+    tp_rr_ratio=1.5,
+    kalman_velocity=0.0,
+    kalman_innovation_zscore=0.0,
+    kalman_trend="FLAT",
 ):
     # 1. Hitung Predicted Price (Mean) berdasarkan Log Return
     # Price_next = Price_now * exp(expected_return)
@@ -620,20 +701,31 @@ def decide_trade(
         'reason': 'No signal generated'
     }
 
-    # 2. Cek Stabilitas RLS
+    # 2. Kalman Trigger: arah entry ditentukan oleh velocity + innovation z-score.
+    kalman_velocity_threshold = float(getattr(parameter, "KALMAN_VELOCITY_THRESHOLD", 1e-6))
+    kalman_entry_zscore = float(getattr(parameter, "KALMAN_ENTRY_ZSCORE", 0.25))
+    vel_ratio = abs(kalman_velocity) / kalman_velocity_threshold
+    z_ratio = abs(kalman_innovation_zscore) / kalman_entry_zscore
+
+    # Jika salah satu sangat kuat (misal 2x lipat threshold), kita anggap valid.
+    if (vel_ratio + z_ratio) < 1.5:
+        trade_decision['reason'] = f'Combined Kalman Trigger Weak ({vel_ratio + z_ratio:.2f})'
+        return trade_decision
+
+    # 3. Cek Stabilitas RLS
     if rls_param_deviation_score is not None and rls_deviation_threshold is not None:
         if rls_param_deviation_score > rls_deviation_threshold:
             trade_decision['reason'] = f'RLS unstable ({rls_param_deviation_score:.4f} > {rls_deviation_threshold:.4f})'
             log_stream.write(f"    [WARN] {pair_name}: {trade_decision['reason']}\n")
             return trade_decision
 
-    # 3. Validasi Data (Menggunakan forecast_std dari argumen)
+    # 4. Validasi Data (Menggunakan forecast_std dari argumen)
     if np.isnan(latest_actual_price) or np.isnan(expected_return) or np.isnan(forecast_std) or forecast_std <= 0:
         trade_decision['reason'] = 'Invalid input data (NaN or non-positive values)'
         log_stream.write(f"    [WARN] {pair_name}: {trade_decision['reason']}\n")
         return trade_decision
 
-    # 4. Dynamic Adjustments
+    # 5. Dynamic Adjustments
     k_atr_stop_adj = k_atr_stop
     k_model_stop_adj = k_model_stop
     tp_rr_adj = tp_rr_ratio
@@ -650,7 +742,7 @@ def decide_trade(
         
         snr_thresh_adj = snr_threshold * (1 + (rls_param_deviation_score * parameter.RLS_SNR_INCREASE_FACTOR))
 
-    # 5. SNR Calculation (Predicted Log Return / Return Std Dev)
+    # 6. SNR Calculation (Predicted Log Return / Return Std Dev)
     snr = expected_return / forecast_std_return
     trade_decision['snr'] = snr
 
@@ -659,7 +751,7 @@ def decide_trade(
         log_stream.write(f"    [INFO] {pair_name}: {trade_decision['reason']}\n")
         return trade_decision
 
-    # 6. SL Distance Calculation
+    # 7. SL Distance Calculation
     # Note: forecast_std (price) dikonversi ke price distance
     sl_dist_atr = k_atr_stop_adj * hf_atr
     sl_dist_model = k_model_stop_adj * forecast_std_return * latest_actual_price
@@ -669,11 +761,11 @@ def decide_trade(
         trade_decision['reason'] = 'SL Distance too small'
         return trade_decision
 
-    # 7. Signal Direction
-    if expected_return > 0:
+    # 8. Signal Direction mengikuti Kalman trigger
+    if kalman_trend == "UP" and kalman_velocity > 0:
         trade_decision['signal'] = 'BUY'
         direction = 1
-    elif expected_return < 0:
+    elif kalman_trend == "DOWN" and kalman_velocity < 0:
         trade_decision['signal'] = 'SELL'
         direction = -1
     else:
@@ -681,28 +773,31 @@ def decide_trade(
 
     sl_dist = abs(sl_dist)
     
-    # Hitung Jarak Prediksi (Target Move) dalam satuan Price
-    # Jarak dari harga saat ini ke predicted_mean
-    prediction_dist = abs(predicted_mean - latest_actual_price)
-    
-    realized_rr = prediction_dist / sl_dist if sl_dist > 0 else 0
+    # Hitung Jarak Prediksi (Target Move) dalam satuan price.
+    # Bila predicted_mean terlalu dekat/berlawanan arah dengan arah entry Kalman,
+    # pakai minimal target berbasis RR agar TP tidak terlalu sempit.
+    signed_prediction_move = (predicted_mean - latest_actual_price) * direction
+    prediction_dist = max(signed_prediction_move, 0.0)
+    min_target_dist = sl_dist * tp_rr_adj
+    effective_target_dist = max(prediction_dist, min_target_dist)
+
+    realized_rr = effective_target_dist / sl_dist if sl_dist > 0 else 0
     trade_decision['rr_ratio'] = realized_rr
     # FILTER KRUSIAL: Jika target keuntungan lebih kecil dari risiko, jangan masuk.
     # Batas minimal 0.8 atau 1.0 agar masuk akal setelah spread.
-    
-    if realized_rr < parameter.RLS_TP_RR_MIN:
+
+    if realized_rr < tp_rr_adj:
         trade_decision['signal'] = 'HOLD'
-        trade_decision['reason'] = f'Bad RR Ratio ({realized_rr:.2f} < {parameter.RLS_TP_RR_MIN})'
-        log_stream.write(f"    [INFO] {pair_name}: {trade_decision['reason']} (Target: {prediction_dist:.2f}, SL Dist: {sl_dist:.2f})\n")
+        trade_decision['reason'] = f'Bad RR Ratio ({realized_rr:.2f} < {tp_rr_adj:.2f})'
+        log_stream.write(f"    [INFO] {pair_name}: {trade_decision['reason']} (Target: {effective_target_dist:.2f}, SL Dist: {sl_dist:.2f})\n")
         return trade_decision
 
     if direction == 1: # BUY
-        # Take Profit sekarang menggunakan nilai Prediksi Mean
-        # Kita bisa tambahkan sedikit buffer atau multiplier jika ingin lebih agresif
-        tp_price = predicted_mean 
+        # TP mengikuti target efektif (model atau RR minimum, mana yang lebih jauh).
+        tp_price = latest_actual_price + effective_target_dist
         sl_price = latest_actual_price - sl_dist
     else: # SELL
-        tp_price = predicted_mean
+        tp_price = latest_actual_price - effective_target_dist
         sl_price = latest_actual_price + sl_dist
 
     # Hitung Realized RR Ratio (Penting untuk log dan monitoring)
@@ -714,7 +809,7 @@ def decide_trade(
     max_risk_usd = equity * risk_pct
     raw_units = max_risk_usd / sl_dist
     
-    # Apply caps (Contoh: Max 0.02, Min 0.01)
+    # Apply caps (Saat ini hard cap = 0.01 lot; di bawah 0.01 tidak dieksekusi)
     position_units = max(0.0, min(raw_units, 0.01))
     if position_units < 0.01:
         position_units = 0.0
@@ -913,6 +1008,7 @@ def start_realtime_monitoring(
     start_time = time.time()
     end_time = start_time + total_duration_minutes * 60
     cycle_count = 0
+    expected_return_state: Dict[str, float] = {}
 
     if log_output_path:
         log_stream_main = open(log_output_path, 'a')
@@ -1307,7 +1403,12 @@ def start_realtime_monitoring(
                 innovation_norm = float("inf") if last_Y_t is None else float(np.linalg.norm(Y_t - last_Y_t))
 
                 should_update_rls = True
-                if not _is_new_timeframe_close(timeframe_name, current_bar_timestamp, timeframe_last_close_map):
+                if not _is_new_timeframe_close(
+                    timeframe_name,
+                    current_bar_timestamp,
+                    timeframe_last_close_map,
+                    marker_key=estimator_label,
+                ):
                     should_update_rls = False
                     log_stream.write(
                         f"    [INFO] {estimator_label}: parameter update skipped (timeframe candle not closed).\n"
@@ -1451,7 +1552,7 @@ def start_realtime_monitoring(
                         }
                         continue
 
-                    rls_expected_return = infer_rls_expected_return(
+                    raw_rls_expected_return = infer_rls_expected_return(
                         log_stream=log_stream,
                         pair_name=pair_name, # Fungsi akan mencari group & index sendiri
                         rls_estimators=rls_estimators,
@@ -1460,9 +1561,16 @@ def start_realtime_monitoring(
                         lagged_hf_log_returns_df=lagged_hf_log_returns_df
                     )
 
-                    if rls_expected_return is None:
+                    if raw_rls_expected_return is None:
                         trade_signals[pair_name] = {"signal": "HOLD", "reason": "RLS unavailable"}
                         continue
+
+                    prev_expected_return = expected_return_state.get(pair_name, float(raw_rls_expected_return))
+                    rls_expected_return = _stabilize_expected_return(
+                        raw_expected_return=float(raw_rls_expected_return),
+                        previous_expected_return=prev_expected_return,
+                    )
+                    expected_return_state[pair_name] = float(rls_expected_return)
 
                     predicted_mean = latest_hf_actual_prices[pair_name] * np.exp(rls_expected_return)
                     forecast_std = _estimate_forecast_std(pair_name, latest_hf_actual_prices[pair_name], confidence_level, kalman_metrics)
@@ -1525,6 +1633,9 @@ def start_realtime_monitoring(
                     group_dcc_score = dcc_group_metrics.get(pair_group, {}).get("contagion_score", 0.0)
                     dcc_risk_multiplier = 1 + (group_dcc_score * float(getattr(parameter, "DCC_RISK_MULTIPLIER", 0.5)))
 
+                    kalman_result = _run_kalman_filter_step(pair_name, latest_hf_actual_prices[pair_name])
+                    kalman_metrics[pair_name] = kalman_result
+
                     signal = decide_trade(
                         log_stream=log_stream,
                         pair_name=pair_name,
@@ -1540,11 +1651,11 @@ def start_realtime_monitoring(
                         snr_threshold=parameter.SNR_THRESHOLD,
                         rls_param_deviation_score=pair_rls_deviation,
                         rls_deviation_threshold=parameter.RLS_DEVIATION_THRESHOLD,
-                        tp_rr_ratio=parameter.TP_RR_RATIO
+                        tp_rr_ratio=parameter.TP_RR_RATIO,
+                        kalman_velocity=float(kalman_result.get("velocity", 0.0)),
+                        kalman_innovation_zscore=float(kalman_result.get("innovation_zscore", 0.0)),
+                        kalman_trend=str(kalman_result.get("trend", "FLAT")),
                     )
-
-                    kalman_result = _run_kalman_filter_step(pair_name, latest_hf_actual_prices[pair_name])
-                    kalman_metrics[pair_name] = kalman_result
 
                     signal_d1 = "BUY" if predicted_mean >= latest_hf_actual_prices[pair_name] else "SELL"
                     signal_h1 = _signal_from_return(rls_expected_return)
@@ -1560,6 +1671,19 @@ def start_realtime_monitoring(
                         "kalman_trend": kalman_result["trend"],
                         "kalman_z": float(kalman_result["innovation_zscore"])
                     }
+
+                    pair_pred_var = _resolve_pair_pred_variance(rls_metrics, pair_group, timeframe="H1")
+                    pred_var_gate = float(getattr(parameter, "RLS_MAX_PRED_VARIANCE_FOR_ENTRY", 25.0))
+                    if signal.get("signal") in ("BUY", "SELL"):
+                        direction_ok = _passes_rls_directional_confirmation(signal.get("signal", "HOLD"), rls_expected_return)
+                        variance_ok = pair_pred_var < pred_var_gate
+                        if not (direction_ok and variance_ok):
+                            signal["signal"] = "HOLD"
+                            signal["reason"] = (
+                                f"RLS confirmation failed (raw_ret={float(raw_rls_expected_return):.3e}, "
+                                f"ret={rls_expected_return:.3e}, pred_var={pair_pred_var:.3e}, "
+                                f"dir_ok={int(direction_ok)}, var_ok={int(variance_ok)})"
+                            )
 
                     if signal.get("signal") == "BUY":
                         if not (consensus_score >= consensus_threshold and kalman_result["trend"] == "UP"):
@@ -1701,34 +1825,32 @@ def start_realtime_monitoring(
                             log_stream.write(f"    [WARN] RLS return unavailable for {mapped_pair_name}. Skipping.\n")
                             continue
 
-                        # Estimasi Volatilitas Model (Forecast Std) dari Kalman
+                        # Estimasi Volatilitas model + update Kalman untuk manajemen posisi.
                         forecast_std = _estimate_forecast_std(mapped_pair_name, latest_actual_price, confidence_level, kalman_metrics)
-                        forecast_std_return = forecast_std / max(latest_actual_price, 1e-12)
 
-                        # 4. Logika Exit Early (RLS Flip & Kalman Breach)
+                        # 4. Logika Exit early berbasis Kalman flip (menggantikan RLS flip).
                         pair_group = PAIR_TO_RLS_GROUP.get(mapped_pair_name)
                         dcc_score = dcc_group_metrics.get(pair_group, {}).get("contagion_score", 0.0)
-                        dcc_flip_multiplier = 1 + (dcc_score * float(getattr(parameter, "DCC_FLIP_EPS_MULTIPLIER", 0.5)))
+                        # Clamp multiplier agar threshold flip tidak lebih sensitif dari baseline.
+                        dcc_flip_multiplier = max(1.0, 1 + (dcc_score * float(getattr(parameter, "DCC_FLIP_EPS_MULTIPLIER", 0.5))))
 
-                        # Threshold untuk menutup posisi jika prediksi berlawanan dengan arah trade
-                        RLS_FLIP_EPS = forecast_std_return * dcc_flip_multiplier
-
-                        # Kalman Filter Z-Score Breach (Deteksi anomali harga mendadak)
                         kalman_result = _run_kalman_filter_step(mapped_pair_name, latest_actual_price)
-                        kalman_break = abs(kalman_result["innovation_zscore"]) >= float(getattr(parameter, "KALMAN_FLIP_ZSCORE", 3.0))
+                        kalman_metrics[mapped_pair_name] = kalman_result
+                        kalman_flip_threshold = float(getattr(parameter, "KALMAN_FLIP_ZSCORE", 3.0)) * dcc_flip_multiplier
 
                         is_buy = pos_type == mt5_adapter_instance.ORDER_TYPE_BUY
                         is_sell = pos_type == mt5_adapter_instance.ORDER_TYPE_SELL
+                        kalman_trend = str(kalman_result.get("trend", "FLAT"))
+                        kalman_z = abs(float(kalman_result.get("innovation_zscore", 0.0)))
 
-                        close_due_to_rls_flip = (
-                            (is_buy and rls_expected_return < -RLS_FLIP_EPS) or
-                            (is_sell and rls_expected_return > RLS_FLIP_EPS) or
-                            kalman_break
+                        close_due_to_kalman_flip = (
+                            ((is_buy and kalman_trend == "DOWN") or (is_sell and kalman_trend == "UP"))
+                            and kalman_z >= kalman_flip_threshold
                         )
 
-                        if close_due_to_rls_flip:
-                            reason = "RLS Flip" if not kalman_break else "Kalman Anomaly"
-                            log_stream.write(f"    [ALERT] Closing {pos_ticket} ({mapped_pair_name}): {reason}. ={rls_expected_return:+.6f}\n")
+                        if close_due_to_kalman_flip:
+                            reason = f"Kalman Flip z={kalman_z:.2f}"
+                            log_stream.write(f"    [ALERT] Closing {pos_ticket} ({mapped_pair_name}): {reason}.\n")
                             close_signal = {
                                 "signal_id": f"CLOSE_FLIP_{pos_ticket}_{cycle_count}",
                                 "action": "CLOSE",
@@ -1751,7 +1873,15 @@ def start_realtime_monitoring(
 
                         # 6. Kalkulasi Target SL/TP Baru
                         sl_dist = max(k_atr_stop_adj * hf_atr, k_model_stop_adj * forecast_std)
-                        new_tp = latest_actual_price * np.exp(rls_expected_return) # Target profit dinamis dari RLS
+                        entry_price = float(getattr(pos, "price_open", latest_actual_price) or latest_actual_price)
+                        new_tp = _compute_dynamic_position_tp(
+                            is_buy=is_buy,
+                            latest_actual_price=float(latest_actual_price),
+                            entry_price=entry_price,
+                            sl_dist=float(sl_dist),
+                            kalman_result=kalman_result,
+                            pair_rls_deviation=float(pair_rls_deviation),
+                        )  # TP dinamis Kalman + guard RR minimum + guard posisi vs entry
 
                         if is_buy:
                             target_sl = latest_actual_price - sl_dist

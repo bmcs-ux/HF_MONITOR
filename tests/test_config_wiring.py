@@ -35,9 +35,9 @@ class TestConfigWiring(unittest.TestCase):
 
     def test_parameter_model_paths_portable(self):
         source = Path('parameter.py').read_text()
-        self.assertIn("FORECAST_OUTPUT_PATH = os.path.join(ROOT_DIR, 'restored_forecasts.pkl')", source)
-        self.assertIn("FRED_DATA_PATH = os.path.join(ROOT_DIR, 'final_fred_data.pkl')", source)
-        self.assertIn("FITTED_MODELS_PATH = os.path.join(ROOT_DIR, 'fitted_ensemble.pkl')", source)
+        self.assertIn("FORECAST_OUTPUT_PATH = os.path.join(ROOT_DIR, 'vps_sync', 'restored_forecasts.pkl')", source)
+        self.assertIn("FRED_DATA_PATH = os.path.join(ROOT_DIR, 'vps_sync', 'final_fred_data.pkl')", source)
+        self.assertIn("FITTED_MODELS_PATH = os.path.join(ROOT_DIR, 'vps_sync', 'fitted_models.pkl')", source)
 
 
 if __name__ == '__main__':
