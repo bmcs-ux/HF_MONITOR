@@ -60,7 +60,7 @@ VARX_ENDOG_GROUPS = {
     'Risk': ['US500_Close_Log_Return', 'DXY_Close_Log_Return'],
 }
 
-BLOCK_SIGNAL_FOR = {"US500", "US30", "USD/DXY", "USD/CAD", "EUR/USD", "XCU/USD", "XPB/USD"}  # Daftar pair yang diblokir
+BLOCK_SIGNAL_FOR = {"US500", "US30", "DXY", "USDCAD", "EURUSD", "USDJPY", "AUDUSD", "GPBUSD"}  # Daftar pair yang diblokir
 BLOK_SIGNAL_FOR = BLOCK_SIGNAL_FOR  # Backward compatibility
 # Note: yfinance intervals use strings like '1m','5m','15m','60m'. We will resample using pandas offsets.
 
