@@ -21,5 +21,6 @@ pkg/
 src/
 
 # Abaikan file model dan cache (Tambahan yang disarankan)
+daily_news.json
 *.pkl
 __pycache__/
